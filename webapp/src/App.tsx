@@ -128,6 +128,8 @@ export function App() {
             onConfirm={(id, ok) => void chat.confirm(id, ok)}
             suggestions={SUGGESTIONS}
             tools={tools}
+            helpHref="https://www.embeddedci.com/docs/benchpod-ai-agent"
+            toolsReferenceHref="https://www.embeddedci.com/docs/benchpod-mcp#tools"
             intro={
               <Stack gap={4}>
                 <Title order={3} ff="monospace">
