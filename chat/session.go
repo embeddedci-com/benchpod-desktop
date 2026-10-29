@@ -11,6 +11,7 @@
 //	POST {base}/confirm  {"id": "<call id>", "ok": true}
 //	POST {base}/stop
 //	GET  {base}/history                         -> {"messages": [...], "running": bool}
+//	GET  {base}/tools                           -> {"tools": [{"name", "summary"}]}: what the agent may use
 //
 // Each SSE frame is `data: <Event JSON>`. Event types are the agent's (text, tool_call,
 // tool_result, usage, limit) plus confirm (a call waits for the user), done and error.
@@ -235,12 +236,32 @@ func (s *Session) ServeHistory(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"messages": Visible(msgs), "running": running})
 }
 
+// ServeTools handles GET tools: the tools the policy lets the agent use, for the UI to list.
+func (s *Session) ServeTools(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	a := s.Agent
+	s.mu.Unlock()
+	defs, err := a.Tools.List(r.Context())
+	if err != nil {
+		http.Error(w, "could not list the tools: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	WriteTools(w, agent.Summaries(a.Policy.Allowed(defs)))
+}
+
+// WriteTools writes the tools response, for hosts that list tools without a session.
+func WriteTools(w http.ResponseWriter, tools []agent.ToolInfo) {
+	w.Header().Set("Cache-Control", "no-store")
+	WriteJSON(w, http.StatusOK, map[string]any{"tools": tools})
+}
+
 // Mount registers the protocol's handlers under prefix (e.g. "/api/chat") on mux.
 func (s *Session) Mount(mux *http.ServeMux, prefix string) {
 	mux.HandleFunc("POST "+prefix+"/send", s.ServeSend)
 	mux.HandleFunc("POST "+prefix+"/confirm", s.ServeConfirm)
 	mux.HandleFunc("POST "+prefix+"/stop", func(w http.ResponseWriter, r *http.Request) { s.Stop(); w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("GET "+prefix+"/history", s.ServeHistory)
+	mux.HandleFunc("GET "+prefix+"/tools", s.ServeTools)
 	mux.HandleFunc("POST "+prefix+"/reset", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.Reset(); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)

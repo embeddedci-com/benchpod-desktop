@@ -292,3 +292,11 @@ func TestRetriesRateLimit(t *testing.T) {
 		t.Fatalf("400 retried: calls %d err %v", n, err)
 	}
 }
+
+func TestToolSummaries(t *testing.T) {
+	defs := []ToolDef{{Name: "status", Description: "Pod status: firmware, voltage. More."}, {Name: "connect", Description: "Connect to a pod"}, {Name: "flash", Description: "Flash a file\nover SWD.\n\nLong text"}}
+	got := Summaries(Policy{Deny: []string{"connect"}}.Allowed(defs))
+	if len(got) != 2 || got[0].Summary != "Pod status: firmware, voltage." || got[1].Summary != "Flash a file over SWD." {
+		t.Fatalf("%+v", got)
+	}
+}
