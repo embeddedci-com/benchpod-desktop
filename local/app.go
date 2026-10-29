@@ -31,7 +31,11 @@ logic and analog signals, drive voltages, emulate sensors, flash firmware.
 - Say what you are about to change on the hardware before you change it. The app asks the user
   to confirm risky calls; a declined call is not an error, ask what they want instead.
 - When a tool fails, read its error: it names the fix (a pin to release, a voltage to set).
-- Answer briefly. Quote the log lines or the measured values your conclusion rests on.`
+- Answer briefly. Quote the log lines or the measured values your conclusion rests on.
+- To use a UART console: uart_open once, then for each command uart_write it and uart_read
+  with an until_regex that matches the end of the reply (the console's prompt, e.g. "\n> ").
+  uart_read without one returns at once with whatever has arrived, often half a line or an
+  older reply.`
 
 // MCPState is the MCP server's lifecycle, as the UI shows it.
 type MCPState string

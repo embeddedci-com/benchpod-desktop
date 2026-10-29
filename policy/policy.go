@@ -112,8 +112,8 @@ func Demo() agent.Policy {
 			"gpio_read",
 		},
 		Check:           Limits{MaxDACVolts: 3.3}.Check(),
-		MaxToolCalls:    12,
-		MaxTurns:        14,
+		MaxToolCalls:    16,
+		MaxTurns:        18,
 		MaxOutputTokens: 1200,
 		MaxResultChars:  6000,
 	}
