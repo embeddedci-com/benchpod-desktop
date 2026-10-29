@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { ChatView, useChat } from '@bpui'
+import { ChatView, useChat, useTools } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -21,6 +21,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const chat = useChat({ base: '/api/chat' })
+  const tools = useTools('/api/chat')
 
   const refresh = useCallback(async () => setState(await api.state()), [])
   useEffect(() => {
@@ -126,6 +127,7 @@ export function App() {
             onStop={() => void chat.stop()}
             onConfirm={(id, ok) => void chat.confirm(id, ok)}
             suggestions={SUGGESTIONS}
+            tools={tools}
             intro={
               <Stack gap={4}>
                 <Title order={3} ff="monospace">

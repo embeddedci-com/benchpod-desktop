@@ -227,14 +227,27 @@ func (a *App) connectPod(ctx context.Context, restart bool) (*agent.MCPTools, er
 // call to the local action log.
 type podTools struct{ app *App }
 
+// List needs the MCP server, not the pod: the page lists the tools before anything is
+// connected, and a pod that is not reachable is the first tool call's error to report.
 func (p *podTools) List(ctx context.Context) ([]agent.ToolDef, error) {
-	t, err := p.app.connectPod(ctx, false)
-	if t == nil {
+	t, err := p.app.mcp(ctx)
+	if err != nil {
 		return nil, err
 	}
-	// Not connected is no reason to hide the tools: the model reads the error from a call
-	// and tells the user, which is more useful than a run that fails outright.
 	return t.List(ctx)
+}
+
+// mcp returns the running MCP server, starting it (without connecting) when there is none.
+func (a *App) mcp(ctx context.Context) (*agent.MCPTools, error) {
+	a.connMu.Lock()
+	defer a.connMu.Unlock()
+	a.mu.Lock()
+	t := a.tools
+	a.mu.Unlock()
+	if t != nil {
+		return t, nil
+	}
+	return a.startMCP(ctx)
 }
 
 func (p *podTools) Call(ctx context.Context, name string, args map[string]any) (agent.ToolResult, error) {
