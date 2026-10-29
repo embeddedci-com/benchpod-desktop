@@ -1,0 +1,13 @@
+{
+  "name": "benchpod-desktop-shell",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The BenchPod desktop app: a Tauri window around the benchpod-local sidecar.",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.1"
+  },
+  "license": "Apache-2.0"
+}
