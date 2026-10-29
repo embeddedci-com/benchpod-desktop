@@ -47,7 +47,8 @@ var ErrBusy = errors.New("the agent is still answering the previous message")
 
 // Session is one conversation. It is safe for concurrent use; one run at a time.
 type Session struct {
-	// Agent is the model, tools and policy. Its Confirm is set by the session.
+	// Agent is the model, tools and policy. Its Confirm is set by the session. Change it
+	// with SetAgent once the session is in use.
 	Agent *agent.Agent
 	// ConfirmTimeout is how long a call waits for the user's answer (default 5 minutes).
 	ConfirmTimeout time.Duration
@@ -64,6 +65,13 @@ type Session struct {
 // NewSession starts a conversation, optionally with an earlier history.
 func NewSession(a *agent.Agent, history []agent.Message) *Session {
 	return &Session{Agent: a, history: append([]agent.Message(nil), history...), confirms: map[string]chan bool{}}
+}
+
+// SetAgent replaces the model, tools or policy; the run in progress keeps the old ones.
+func (s *Session) SetAgent(a *agent.Agent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Agent = a
 }
 
 // History returns the conversation so far and whether a run is in progress.
@@ -87,9 +95,9 @@ func (s *Session) Send(ctx context.Context, text string, emit func(Event)) error
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	history := append(append([]agent.Message(nil), s.history...), agent.Message{Role: agent.RoleUser, Content: text})
+	a := *s.Agent
 	s.mu.Unlock()
 
-	a := *s.Agent
 	a.Confirm = func(ctx context.Context, call agent.ToolCall) (bool, error) { return s.waitConfirm(ctx, call, emit) }
 	added, usage, err := a.Run(ctx, history, func(e agent.Event) { emit(Event{Event: e}) })
 	cancel()
