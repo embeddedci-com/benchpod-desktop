@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -131,5 +132,22 @@ func TestWindowStartsAtUser(t *testing.T) {
 	}
 	if len(Window(h, 0)) != 6 {
 		t.Fatal("0 = all")
+	}
+}
+
+func TestResultsKeptForTheHistory(t *testing.T) {
+	s := NewSession(&agent.Agent{}, nil)
+	for i := 0; i < maxResults+5; i++ {
+		s.keepResult(fmt.Sprint("c", i), json.RawMessage(`{"n":1}`))
+	}
+	r := s.Results()
+	if len(r) != maxResults {
+		t.Fatalf("kept %d", len(r))
+	}
+	if _, ok := r["c0"]; ok {
+		t.Fatal("oldest not dropped")
+	}
+	if _, ok := r[fmt.Sprint("c", maxResults+4)]; !ok {
+		t.Fatal("newest missing")
 	}
 }

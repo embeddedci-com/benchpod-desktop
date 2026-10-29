@@ -10,7 +10,7 @@
 //	POST {base}/send     {"text": "..."}       -> text/event-stream of Events, ends with done or error
 //	POST {base}/confirm  {"id": "<call id>", "ok": true}
 //	POST {base}/stop
-//	GET  {base}/history                         -> {"messages": [...], "running": bool}
+//	GET  {base}/history                         -> {"messages": [...], "running": bool, "results": {call id: structured}}
 //	GET  {base}/tools                           -> {"tools": [{"name", "summary"}]}: what the agent may use
 //
 // Each SSE frame is `data: <Event JSON>`. Event types are the agent's (text, tool_call,
@@ -66,11 +66,45 @@ type Session struct {
 	history  []agent.Message
 	cancel   context.CancelFunc
 	confirms map[string]chan bool
+	// results are the newest tools' structured output by call id (captures, logs), so a page
+	// that reloads draws them again; the history keeps only the text the model read.
+	results     map[string]json.RawMessage
+	resultOrder []string
 }
+
+// maxResults is how many structured results a session keeps for the page.
+const maxResults = 50
 
 // NewSession starts a conversation, optionally with an earlier history.
 func NewSession(a *agent.Agent, history []agent.Message) *Session {
-	return &Session{Agent: a, history: append([]agent.Message(nil), history...), confirms: map[string]chan bool{}}
+	return &Session{Agent: a, history: append([]agent.Message(nil), history...), confirms: map[string]chan bool{}, results: map[string]json.RawMessage{}}
+}
+
+func (s *Session) keepResult(id string, v json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.results == nil {
+		s.results = map[string]json.RawMessage{}
+	}
+	if _, ok := s.results[id]; !ok {
+		s.resultOrder = append(s.resultOrder, id)
+	}
+	s.results[id] = v
+	for len(s.resultOrder) > maxResults {
+		delete(s.results, s.resultOrder[0])
+		s.resultOrder = s.resultOrder[1:]
+	}
+}
+
+// Results returns the kept structured results by tool call id.
+func (s *Session) Results() map[string]json.RawMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]json.RawMessage, len(s.results))
+	for k, v := range s.results {
+		out[k] = v
+	}
+	return out
 }
 
 // SetAgent replaces the model, tools or policy; the run in progress keeps the old ones.
@@ -106,7 +140,12 @@ func (s *Session) Send(ctx context.Context, text string, emit func(Event)) error
 	s.mu.Unlock()
 
 	a.Confirm = func(ctx context.Context, call agent.ToolCall) (bool, error) { return s.waitConfirm(ctx, call, emit) }
-	added, usage, err := a.Run(ctx, window, func(e agent.Event) { emit(Event{Event: e}) })
+	added, usage, err := a.Run(ctx, window, func(e agent.Event) {
+		if e.Type == agent.EventToolResult && e.Result != nil && len(e.Result.Structured) > 0 {
+			s.keepResult(e.Call.ID, e.Result.Structured)
+		}
+		emit(Event{Event: e})
+	})
 	cancel()
 
 	s.mu.Lock()
@@ -188,6 +227,7 @@ func (s *Session) Reset() error {
 		return ErrBusy
 	}
 	s.history = nil
+	s.results, s.resultOrder = map[string]json.RawMessage{}, nil
 	return nil
 }
 
@@ -233,7 +273,7 @@ func (s *Session) ServeConfirm(w http.ResponseWriter, r *http.Request) {
 // ServeHistory handles GET history.
 func (s *Session) ServeHistory(w http.ResponseWriter, r *http.Request) {
 	msgs, running := s.History()
-	WriteJSON(w, http.StatusOK, map[string]any{"messages": Visible(msgs), "running": running})
+	WriteJSON(w, http.StatusOK, map[string]any{"messages": Visible(msgs), "running": running, "results": s.Results()})
 }
 
 // ServeTools handles GET tools: the tools the policy lets the agent use, for the UI to list.
