@@ -1,0 +1,24 @@
+{
+  "name": "benchpod-desktop-webapp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The BenchPod desktop app's page. The chat and result views come from ../../benchpod-ui (the @bpui alias).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@mantine/core": "^9.7.0",
+    "@mantine/hooks": "^9.6.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  },
+  "license": "Apache-2.0"
+}

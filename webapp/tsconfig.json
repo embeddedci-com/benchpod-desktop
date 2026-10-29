@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": { "@bpui": ["../../benchpod-ui/src/index.ts"], "@bpui/*": ["../../benchpod-ui/src/*"] }
+  },
+  "include": ["src", "../../benchpod-ui/src"],
+  "exclude": ["../../benchpod-ui/src/**/*.test.ts"]
+}
