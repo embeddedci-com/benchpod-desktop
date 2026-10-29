@@ -76,12 +76,20 @@ export function App() {
 
   const cost = chat.usage?.cost ? ` · $${chat.usage.cost.toFixed(4)} this message` : ''
   const footer = (
-    <Text size="xs" c="dimmed">
-      {preset?.local
-        ? `${state.settings.model || 'no model'} on ${preset.name}: runs on this computer, nothing you type leaves it.`
-        : `${state.settings.model || 'no model'} via ${preset?.name ?? state.settings.base_url}: your messages and the tool results (logs, captures) are sent there to run the model.`}
-      {cost}
-    </Text>
+    <Tooltip
+      multiline
+      w={320}
+      withArrow
+      label={
+        preset?.local
+          ? 'Runs on this computer: nothing you type leaves it.'
+          : `Your messages and the tool results (logs, captures) are sent to ${preset?.name ?? 'the provider'} to run the model.`
+      }
+    >
+      <Text size="xs" c="dimmed" style={{ cursor: 'help' }}>
+        {state.settings.model || 'no model'} · {preset?.name ?? state.settings.base_url} ⓘ{cost}
+      </Text>
+    </Tooltip>
   )
 
   return (
@@ -136,7 +144,7 @@ export function App() {
                   benchpod agent
                 </Title>
                 <Text size="sm" c="dimmed">
-                  Ask it to power your board, read its console, capture signals, emulate a sensor or flash firmware. It asks before it changes anything on the hardware.
+                  Ask it to test or debug your board. It asks before changing the hardware.
                 </Text>
               </Stack>
             }
