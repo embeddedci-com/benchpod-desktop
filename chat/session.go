@@ -52,6 +52,9 @@ type Session struct {
 	Agent *agent.Agent
 	// ConfirmTimeout is how long a call waits for the user's answer (default 5 minutes).
 	ConfirmTimeout time.Duration
+	// MaxHistory, when set, sends the model only the newest messages of a long conversation
+	// (cut at a user message, so no tool result loses its call). The whole history is kept.
+	MaxHistory int
 	// OnRun is called after each run with the messages it added and its usage, for a host
 	// that persists conversations or meters tokens. err is the run's error, if any.
 	OnRun func(added []agent.Message, usage agent.Usage, err error)
@@ -96,10 +99,11 @@ func (s *Session) Send(ctx context.Context, text string, emit func(Event)) error
 	s.cancel = cancel
 	history := append(append([]agent.Message(nil), s.history...), agent.Message{Role: agent.RoleUser, Content: text})
 	a := *s.Agent
+	window := Window(history, s.MaxHistory)
 	s.mu.Unlock()
 
 	a.Confirm = func(ctx context.Context, call agent.ToolCall) (bool, error) { return s.waitConfirm(ctx, call, emit) }
-	added, usage, err := a.Run(ctx, history, func(e agent.Event) { emit(Event{Event: e}) })
+	added, usage, err := a.Run(ctx, window, func(e agent.Event) { emit(Event{Event: e}) })
 	cancel()
 
 	s.mu.Lock()
@@ -242,6 +246,20 @@ func (s *Session) Mount(mux *http.ServeMux, prefix string) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+}
+
+// Window returns the newest messages of history, at most max (0 = all), starting at a user
+// message.
+func Window(history []agent.Message, max int) []agent.Message {
+	if max <= 0 || len(history) <= max {
+		return history
+	}
+	for i := len(history) - max; i < len(history); i++ {
+		if history[i].Role == agent.RoleUser {
+			return history[i:]
+		}
+	}
+	return history[len(history)-1:]
 }
 
 // Visible is the history as a UI shows it: system messages left out.

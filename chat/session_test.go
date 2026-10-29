@@ -119,3 +119,17 @@ func TestConfirmTimeoutRefuses(t *testing.T) {
 		t.Fatal("ran without an answer")
 	}
 }
+
+func TestWindowStartsAtUser(t *testing.T) {
+	h := []agent.Message{
+		{Role: agent.RoleUser, Content: "1"}, {Role: agent.RoleAssistant}, {Role: agent.RoleTool},
+		{Role: agent.RoleAssistant, Content: "a"}, {Role: agent.RoleUser, Content: "2"}, {Role: agent.RoleAssistant, Content: "b"},
+	}
+	w := Window(h, 4)
+	if len(w) != 2 || w[0].Content != "2" {
+		t.Fatalf("window %+v", w)
+	}
+	if len(Window(h, 0)) != 6 {
+		t.Fatal("0 = all")
+	}
+}

@@ -241,3 +241,19 @@ func TestRunBadArguments(t *testing.T) {
 		t.Fatalf("calls %v result %q", calls, added[1].Content)
 	}
 }
+
+func TestPromptCacheBreakpoints(t *testing.T) {
+	srv, bodies := sseServer(t, []string{`{"choices":[{"delta":{"content":"ok"}}]}`})
+	m := &OpenAICompatible{BaseURL: srv.URL + "/v1", Model: "anthropic/x", PromptCache: true}
+	_, _, err := m.Chat(context.Background(), ChatRequest{Messages: []Message{
+		{Role: RoleSystem, Content: "sys"}, {Role: RoleUser, Content: "a"}, {Role: RoleAssistant, Content: "b"}, {Role: RoleUser, Content: "c"},
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs := (*bodies)[0]["messages"].([]any)
+	isParts := func(i int) bool { _, ok := msgs[i].(map[string]any)["content"].([]any); return ok }
+	if !isParts(0) || isParts(1) || isParts(2) || !isParts(3) {
+		t.Fatalf("breakpoints wrong: %v", msgs)
+	}
+}

@@ -40,8 +40,13 @@ type OpenAICompatible struct {
 	Headers map[string]string
 	// Extra is merged into the request body, for provider options the loop does not model
 	// (OpenRouter's "provider": {"data_collection": "deny"}, say).
-	Extra  map[string]any
-	Client *http.Client
+	Extra map[string]any
+	// PromptCache marks cache breakpoints (cache_control) on the system prompt and on the
+	// newest message, for Anthropic models behind OpenRouter: the tools and the system prompt,
+	// most of every request, are then read from the cache at a tenth of the price. Leave it off
+	// for providers that reject the field.
+	PromptCache bool
+	Client      *http.Client
 }
 
 // APIError is an error the provider returned, with its HTTP status (0 for one sent mid-stream).
@@ -68,17 +73,33 @@ type wireToolCall struct {
 }
 
 type wireMessage struct {
-	Role       Role           `json:"role"`
-	Content    *string        `json:"content"`
+	Role Role `json:"role"`
+	// Content is a string, nil, or content parts (to carry cache_control).
+	Content    any            `json:"content"`
 	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"`
 }
 
-func toWire(msgs []Message) []wireMessage {
+type contentPart struct {
+	Type         string         `json:"type"`
+	Text         string         `json:"text"`
+	CacheControl map[string]any `json:"cache_control,omitempty"`
+}
+
+func cachedText(s string) []contentPart {
+	return []contentPart{{Type: "text", Text: s, CacheControl: map[string]any{"type": "ephemeral"}}}
+}
+
+func toWire(msgs []Message, cache bool) []wireMessage {
 	out := make([]wireMessage, 0, len(msgs))
-	for _, m := range msgs {
+	for i, m := range msgs {
 		content := m.Content
-		w := wireMessage{Role: m.Role, Content: &content, ToolCallID: m.ToolCallID}
+		w := wireMessage{Role: m.Role, Content: content, ToolCallID: m.ToolCallID}
+		// Two breakpoints: the system prompt (tools + system, the same every call) and the
+		// newest message (so the next turn of a tool loop reads the whole conversation back).
+		if cache && content != "" && (m.Role == RoleSystem || (i == len(msgs)-1 && m.Role != RoleAssistant)) {
+			w.Content = cachedText(content)
+		}
 		for i, tc := range m.ToolCalls {
 			wc := wireToolCall{Index: i, ID: tc.ID, Type: "function"}
 			wc.Function.Name, wc.Function.Arguments = tc.Name, tc.Arguments
@@ -109,7 +130,7 @@ func (c *OpenAICompatible) Chat(ctx context.Context, req ChatRequest, onText fun
 		body[k] = v
 	}
 	body["model"] = c.Model
-	body["messages"] = toWire(req.Messages)
+	body["messages"] = toWire(req.Messages, c.PromptCache)
 	body["stream"] = true
 	body["stream_options"] = map[string]any{"include_usage": true}
 	if req.MaxTokens > 0 {
