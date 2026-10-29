@@ -34,6 +34,8 @@ type Event struct {
 	agent.Event
 	// Error is set on type "error".
 	Error string `json:"error,omitempty"`
+	// Data carries a host's own event (the demo's quota, say).
+	Data any `json:"data,omitempty"`
 }
 
 const (

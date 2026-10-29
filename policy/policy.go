@@ -108,6 +108,7 @@ func Demo() agent.Policy {
 			"capture_la", "decode_la", "la_pins",
 			"adc_read", "capture_adc", "dac_output", "dac_stop", "generate", "measure_power",
 			"enable_i2c_sensor", "set_i2c_sensor", "disable_i2c_sensor", "i2c_sensor_status", "i2c_sensor_types",
+			"i2c_sensor_capture", "i2c_sensor_regs", "set_pull", "pull_status",
 			"gpio_read",
 		},
 		Check:           Limits{MaxDACVolts: 3.3}.Check(),
