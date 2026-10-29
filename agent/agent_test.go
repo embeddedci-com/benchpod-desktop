@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -255,5 +256,39 @@ func TestPromptCacheBreakpoints(t *testing.T) {
 	isParts := func(i int) bool { _, ok := msgs[i].(map[string]any)["content"].([]any); return ok }
 	if !isParts(0) || isParts(1) || isParts(2) || !isParts(3) {
 		t.Fatalf("breakpoints wrong: %v", msgs)
+	}
+}
+
+func TestRetriesRateLimit(t *testing.T) {
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		if n < 3 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(429)
+			fmt.Fprint(w, `{"error":{"message":"Rate limit exceeded"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	old := Retries
+	defer func() { Retries = old }()
+	m := &OpenAICompatible{BaseURL: srv.URL, Model: "m"}
+	start := time.Now()
+	msg, _, err := m.Chat(context.Background(), ChatRequest{}, nil)
+	if err != nil || msg.Content != "ok" || n != 3 {
+		t.Fatalf("msg %+v err %v calls %d", msg, err, n)
+	}
+	if time.Since(start) > 10*time.Second {
+		t.Fatal("waited too long")
+	}
+	// A 400 is not retried.
+	n = 0
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { n++; w.WriteHeader(400) }))
+	defer bad.Close()
+	if _, _, err := (&OpenAICompatible{BaseURL: bad.URL}).Chat(context.Background(), ChatRequest{}, nil); err == nil || n != 1 {
+		t.Fatalf("400 retried: calls %d err %v", n, err)
 	}
 }

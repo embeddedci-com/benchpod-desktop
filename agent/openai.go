@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -123,6 +124,50 @@ func (c *OpenAICompatible) client() *http.Client {
 	return &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 2 * time.Minute, Proxy: http.ProxyFromEnvironment}}
 }
 
+// Retries is how often a call refused for rate limits or overload (HTTP 429, 503) is tried again,
+// waiting for the provider's Retry-After or a growing backoff. Nothing has streamed by then, so
+// a retry is invisible to the user apart from the wait.
+var Retries = 3
+
+func (c *OpenAICompatible) post(ctx context.Context, body []byte) (*http.Response, error) {
+	for attempt := 0; ; attempt++ {
+		hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		hreq.Header.Set("Content-Type", "application/json")
+		hreq.Header.Set("Accept", "text/event-stream")
+		if c.APIKey != "" {
+			hreq.Header.Set("Authorization", "Bearer "+c.APIKey)
+		}
+		for k, v := range c.Headers {
+			hreq.Header.Set(k, v)
+		}
+		resp, err := c.client().Do(hreq)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode/100 == 2 {
+			return resp, nil
+		}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		resp.Body.Close()
+		apiErr := &APIError{Status: resp.StatusCode, Message: errorMessage(raw)}
+		if (resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode != http.StatusServiceUnavailable) || attempt >= Retries {
+			return nil, apiErr
+		}
+		wait := time.Duration(1<<attempt) * 2 * time.Second // 2, 4, 8 s
+		if ra, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && ra > 0 {
+			wait = time.Duration(min(ra, 30)) * time.Second
+		}
+		select {
+		case <-time.After(wait):
+		case <-ctx.Done():
+			return nil, apiErr
+		}
+	}
+}
+
 // Chat implements Model with a streamed chat completion.
 func (c *OpenAICompatible) Chat(ctx context.Context, req ChatRequest, onText func(string)) (Message, Usage, error) {
 	body := map[string]any{}
@@ -153,27 +198,11 @@ func (c *OpenAICompatible) Chat(ctx context.Context, req ChatRequest, onText fun
 	if err != nil {
 		return Message{}, Usage{}, err
 	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/chat/completions", bytes.NewReader(buf))
-	if err != nil {
-		return Message{}, Usage{}, err
-	}
-	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Accept", "text/event-stream")
-	if c.APIKey != "" {
-		hreq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
-	for k, v := range c.Headers {
-		hreq.Header.Set(k, v)
-	}
-	resp, err := c.client().Do(hreq)
+	resp, err := c.post(ctx, buf)
 	if err != nil {
 		return Message{}, Usage{}, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		return Message{}, Usage{}, &APIError{Status: resp.StatusCode, Message: errorMessage(raw)}
-	}
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		// A server that ignores stream=true answers with one JSON body.
 		raw, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
