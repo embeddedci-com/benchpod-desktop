@@ -1,0 +1,21 @@
+# Secrets: model keys live in .env (see .env.example) or the OS keychain, never in git
+.env
+.env.*
+!.env.example
+
+# Node. No trailing slash, so a node_modules symlinked in from another checkout counts too.
+node_modules
+dist/
+
+# The local app: build outputs
+bin/
+webapp/dist-app/
+cmd/benchpod-local/web/*
+!cmd/benchpod-local/web/.gitkeep
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/binaries/
+desktop/src-tauri/gen/
+
+# Local editor/agent tooling
+.claude/
