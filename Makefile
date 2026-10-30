@@ -46,8 +46,9 @@ dev: check-bpui
 
 test: check-bpui
 	go vet ./... && go test ./...
+	cd ../benchpod-ui && ([ -d node_modules ] || npm ci)
 	cd webapp && ([ -d node_modules ] || npm ci) && npm run typecheck
-	cd ../benchpod-ui && ([ -d node_modules ] || npm ci) && npm test
+	cd ../benchpod-ui && npm test
 
 # ---- the desktop app (Tauri around the benchpod-local sidecar) ----
 
