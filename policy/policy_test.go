@@ -44,9 +44,26 @@ func TestPoliciesHideConnectionTools(t *testing.T) {
 		}
 	}
 	pod := Pod(Limits{})
-	for _, n := range []string{"connect", "flash", "command", "lan_tls"} {
+	for _, n := range []string{"connect", "spi_flash_program", "command", "lan_tls"} {
 		if !contains(pod.Deny, n) {
 			t.Errorf("AI tab offers %s", n)
+		}
+	}
+	if contains(pod.Deny, "flash") || !contains(pod.Confirm, "flash") {
+		t.Error("AI tab: flash must be offered, with a confirmation")
+	}
+	for name, args := range map[string]map[string]any{
+		"a file":    {"file": "/etc/passwd", "build": "b1"},
+		"local run": {"build": "b1", "server_side": false},
+		"no build":  {},
+	} {
+		if pod.Check("flash", args) == nil {
+			t.Errorf("AI tab flashes with %s", name)
+		}
+	}
+	for _, args := range []map[string]any{{"build": "b1"}, {"build": "latest", "repo": "o/r", "ref": "main"}} {
+		if err := pod.Check("flash", args); err != nil {
+			t.Errorf("AI tab refuses %v: %v", args, err)
 		}
 	}
 }

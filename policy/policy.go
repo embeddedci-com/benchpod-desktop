@@ -7,6 +7,7 @@
 package policy
 
 import (
+	"errors"
 	"fmt"
 	"math"
 
@@ -125,13 +126,36 @@ func Pod(l Limits) agent.Policy {
 	return agent.Policy{
 		Deny: []string{
 			"connect", "disconnect", "cloud_list_devices",
-			"flash", "spi_flash_program", // their file argument is a path on the machine running the MCP server
+			"spi_flash_program", // its file argument is a path on the machine running the MCP server
 			"save_capture_as_recording", "lan_tls", "usb_network", "command",
 		},
 		Confirm:         Risky,
-		Check:           l.Check(),
+		Check:           podCheck(l),
 		MaxToolCalls:    30,
 		MaxTurns:        36,
 		MaxOutputTokens: 4000,
+	}
+}
+
+// podCheck adds to the limits: on a hosted server, flash takes only a build uploaded to
+// embeddedci.com, flashed by the server. A file is a path on the machine running the MCP server,
+// and server_side=false runs OpenOCD there.
+func podCheck(l Limits) func(string, map[string]any) error {
+	check := l.Check()
+	return func(name string, args map[string]any) error {
+		if name == "flash" {
+			if f, _ := args["file"].(string); f != "" {
+				return errors.New("flash takes an uploaded build here, not a file: upload the file on the Flash DUT tab, or give a build id or repo and ref")
+			}
+			if v, ok := args["server_side"].(bool); ok && !v {
+				return errors.New("flash runs on the server here: server_side=false is not available")
+			}
+			b, _ := args["build"].(string)
+			r, _ := args["repo"].(string)
+			if b == "" && r == "" {
+				return errors.New("flash needs an uploaded build: a build id, or repo and ref")
+			}
+		}
+		return check(name, args)
 	}
 }
