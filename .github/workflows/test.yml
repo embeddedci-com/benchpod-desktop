@@ -1,5 +1,6 @@
-# Go tests (the agent loop, the chat protocol and the policies against an in-memory MCP server and
-# a fake model), the webapp typecheck and benchpod-ui's tests. Needs no pod, no model and no key.
+# Go tests (the agent loop, the chat protocol, the policies, and the app's first run against the
+# simulated pod and a scripted model), the webapp typecheck and benchpod-ui's tests. Needs no pod,
+# no model and no key.
 name: test
 
 on:
@@ -34,4 +35,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+      # The first-run test drives the real MCP server against the simulated pod (benchpod-sim).
+      - name: Install the BenchPod MCP server
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mcp"
+          "$RUNNER_TEMP/mcp/bin/pip" install --quiet embeddedci-mcp
+          echo "BENCHPOD_MCP_COMMAND=$RUNNER_TEMP/mcp/bin/embeddedci-mcp" >> "$GITHUB_ENV"
       - run: make -C benchpod-desktop test

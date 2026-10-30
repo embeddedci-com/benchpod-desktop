@@ -3,6 +3,7 @@ module github.com/embeddedci-com/benchpod-desktop
 go 1.26.0
 
 require (
+	github.com/embeddedci-com/benchpod-sim v0.0.0-20261030182017-2e0c0a09f1fb
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/zalando/go-keyring v0.2.8
 )
