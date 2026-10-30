@@ -61,6 +61,13 @@ func TestPoliciesHideConnectionTools(t *testing.T) {
 			t.Errorf("AI tab flashes with %s", name)
 		}
 	}
+	withFile := PodFiles(Limits{}, func(f string) bool { return f == "app.elf" })
+	if err := withFile.Check("flash", map[string]any{"file": "app.elf"}); err != nil {
+		t.Errorf("vouched file refused: %v", err)
+	}
+	if withFile.Check("flash", map[string]any{"file": "/etc/passwd"}) == nil {
+		t.Error("an unvouched path was allowed")
+	}
 	for _, args := range []map[string]any{{"build": "b1"}, {"build": "latest", "repo": "o/r", "ref": "main"}} {
 		if err := pod.Check("flash", args); err != nil {
 			t.Errorf("AI tab refuses %v: %v", args, err)

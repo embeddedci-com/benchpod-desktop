@@ -122,7 +122,10 @@ func Demo() agent.Policy {
 
 // Pod is the AI tab of the EmbeddedCI server, driving the user's own pod: the desktop set
 // minus the tools that read files on the server or reconfigure the pod's network.
-func Pod(l Limits) agent.Policy {
+func Pod(l Limits) agent.Policy { return PodFiles(l, nil) }
+
+// PodFiles is Pod with files the host vouches for: flash may take a file allowed returns true for.
+func PodFiles(l Limits, allowed func(string) bool) agent.Policy {
 	return agent.Policy{
 		Deny: []string{
 			"connect", "disconnect", "cloud_list_devices",
@@ -130,22 +133,25 @@ func Pod(l Limits) agent.Policy {
 			"save_capture_as_recording", "lan_tls", "usb_network", "command",
 		},
 		Confirm:         Risky,
-		Check:           podCheck(l),
+		Check:           podCheck(l, allowed),
 		MaxToolCalls:    30,
 		MaxTurns:        36,
 		MaxOutputTokens: 4000,
 	}
 }
 
-// podCheck adds to the limits: on a hosted server, flash takes only a build uploaded to
-// embeddedci.com, flashed by the server. A file is a path on the machine running the MCP server,
-// and server_side=false runs OpenOCD there.
-func podCheck(l Limits) func(string, map[string]any) error {
+// podCheck adds to the limits: on a hosted server, flash takes a build uploaded to embeddedci.com,
+// flashed by the server, or a file the host vouches for. Any other file is a path on the machine
+// running the MCP server, and server_side=false on a build runs OpenOCD there.
+func podCheck(l Limits, allowed func(string) bool) func(string, map[string]any) error {
 	check := l.Check()
 	return func(name string, args map[string]any) error {
 		if name == "flash" {
 			if f, _ := args["file"].(string); f != "" {
-				return errors.New("flash takes an uploaded build here, not a file: upload the file on the Flash DUT tab, or give a build id or repo and ref")
+				if allowed == nil || !allowed(f) {
+					return errors.New("flash takes an attached file or an uploaded build here, not a path: ask the user to attach the file, or give a build id or repo and ref")
+				}
+				return check(name, args)
 			}
 			if v, ok := args["server_side"].(bool); ok && !v {
 				return errors.New("flash runs on the server here: server_side=false is not available")
@@ -153,7 +159,7 @@ func podCheck(l Limits) func(string, map[string]any) error {
 			b, _ := args["build"].(string)
 			r, _ := args["repo"].(string)
 			if b == "" && r == "" {
-				return errors.New("flash needs an uploaded build: a build id, or repo and ref")
+				return errors.New("flash needs an attached file or an uploaded build: a build id, or repo and ref")
 			}
 		}
 		return check(name, args)
