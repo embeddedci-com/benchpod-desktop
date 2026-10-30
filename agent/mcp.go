@@ -25,6 +25,30 @@ type Tools interface {
 // MCPTools is a Tools backed by an MCP client session.
 type MCPTools struct {
 	session *mcp.ClientSession
+	done    chan struct{} // closed when the session ends (the server exited or Close)
+}
+
+// CallTimeout bounds a tool call once it has started; see Call.
+var CallTimeout = 3 * time.Minute
+
+func newMCPTools(session *mcp.ClientSession) *MCPTools {
+	m := &MCPTools{session: session, done: make(chan struct{})}
+	go func() {
+		_ = session.Wait()
+		close(m.done)
+	}()
+	return m
+}
+
+// Alive reports whether the server is still there: false once it exited, so the owner can
+// start a new one instead of failing every call.
+func (m *MCPTools) Alive() bool {
+	select {
+	case <-m.done:
+		return false
+	default:
+		return true
+	}
 }
 
 // StartMCP launches an MCP server over stdio (cmd's stdin and stdout) and opens a session.
@@ -35,7 +59,7 @@ func StartMCP(ctx context.Context, cmd *exec.Cmd, clientName, clientVersion stri
 	if err != nil {
 		return nil, fmt.Errorf("start MCP server %s: %w", cmd.Path, err)
 	}
-	return &MCPTools{session: session}, nil
+	return newMCPTools(session), nil
 }
 
 // ConnectMCP opens a session over any MCP transport (an in-memory one in tests, streamable HTTP).
@@ -45,7 +69,7 @@ func ConnectMCP(ctx context.Context, t mcp.Transport, clientName, clientVersion 
 	if err != nil {
 		return nil, err
 	}
-	return &MCPTools{session: session}, nil
+	return newMCPTools(session), nil
 }
 
 func (m *MCPTools) Instructions() string {
@@ -81,6 +105,11 @@ func (m *MCPTools) Call(ctx context.Context, name string, args map[string]any) (
 	if args == nil {
 		args = map[string]any{}
 	}
+	// A started call runs to its end, even when the run is stopped: cancelling it mid-way
+	// leaves the BenchPod MCP server wedged or gone (and the bench half-way through a power
+	// cycle). The caller sees the stop once the call returns. CallTimeout still bounds it.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CallTimeout)
+	defer cancel()
 	res, err := m.session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
 		return ToolResult{}, err

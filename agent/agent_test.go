@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -298,5 +299,46 @@ func TestToolSummaries(t *testing.T) {
 	got := Summaries(Policy{Deny: []string{"connect"}}.Allowed(defs))
 	if len(got) != 2 || got[0].Summary != "Pod status: firmware, voltage." || got[1].Summary != "Flash a file over SWD." {
 		t.Fatalf("%+v", got)
+	}
+}
+
+// A stopped run lets the tool call it started finish: the server is not sent a cancel, which
+// leaves the BenchPod MCP server wedged. Alive turns false once the session ends.
+func TestCallSurvivesStopAndAlive(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "slow", Version: "1"}, nil)
+	var cancelled atomic.Bool
+	mcp.AddTool(server, &mcp.Tool{Name: "power_cycle_and_capture"}, func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, any, error) {
+		select {
+		case <-time.After(300 * time.Millisecond):
+		case <-ctx.Done():
+			cancelled.Store(true)
+			return nil, nil, ctx.Err()
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "booted"}}}, nil, nil
+	})
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(context.Background(), st, nil); err != nil {
+		t.Fatal(err)
+	}
+	tools, err := ConnectMCP(context.Background(), ct, "test", "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	res, err := tools.Call(ctx, "power_cycle_and_capture", nil)
+	if err != nil || res.Text != "booted" || cancelled.Load() {
+		t.Fatalf("call cut short: %+v %v cancelled=%v", res, err, cancelled.Load())
+	}
+	if !tools.Alive() {
+		t.Fatal("not alive while connected")
+	}
+	tools.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for tools.Alive() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if tools.Alive() {
+		t.Fatal("still alive after Close")
 	}
 }
