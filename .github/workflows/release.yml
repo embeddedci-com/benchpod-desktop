@@ -1,0 +1,203 @@
+# Builds the desktop app for every platform and attaches the installers to a draft release.
+#
+#   scripts/release.sh X.Y.Z    tags vX.Y.Z and pushes the tag, which starts this
+#   run manually, tag given     the same, for a tag that already exists (e.g. to retry a release)
+#   run manually, no tag        a test build: installers are kept as workflow artifacts only
+#
+# Publishing the draft is the human step; it also updates the Homebrew cask (homebrew.yml).
+# Installers are not code-signed. See README.md for what that means on each platform.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and release (e.g. v0.1.0). Leave empty for a test build."
+        required: false
+      version:
+        description: "Version for a test build without a tag (no v prefix). Ignored when a tag is given."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+      ref: ${{ steps.v.outputs.ref }}
+    steps:
+      - name: Tag and version
+        id: v
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          tag="$INPUT_TAG"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then tag="${GITHUB_REF_NAME}"; fi
+          if [ -n "$tag" ]; then
+            if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "::error::$tag is not a version tag (vX.Y.Z)"; exit 1
+            fi
+            if ! git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY" "refs/tags/$tag" >/dev/null; then
+              echo "::error::tag $tag does not exist"; exit 1
+            fi
+            version="${tag#v}"
+            ref="refs/tags/$tag"
+          else
+            version="$INPUT_VERSION"
+            [ -n "$version" ] || version="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+            ref="$GITHUB_REF"
+          fi
+          { echo "tag=$tag"; echo "version=$version"; echo "ref=$ref"; } >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: prepare
+    uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ needs.prepare.outputs.ref }}
+
+  desktop:
+    needs: [prepare, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-15 is arm64; the x86_64 build cross-compiles there. ubuntu-22.04 for its older
+        # glibc and webkit, so the .deb and AppImage install on more distributions.
+        include:
+          - { runner: macos-15, target: aarch64-apple-darwin, goos: darwin, goarch: arm64 }
+          - { runner: macos-15, target: x86_64-apple-darwin, goos: darwin, goarch: amd64 }
+          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu, goos: linux, goarch: amd64 }
+          - { runner: windows-2025, target: x86_64-pc-windows-msvc, goos: windows, goarch: amd64, ext: .exe }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          path: benchpod-desktop
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: embeddedci-com/benchpod-ui
+          path: benchpod-ui
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: benchpod-desktop/go.mod
+          cache-dependency-path: benchpod-desktop/go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch, 2026-09-03
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: benchpod-desktop/desktop/src-tauri
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Build the webapp
+        run: make -C benchpod-desktop local-webapp VERSION="$VERSION"
+      - name: Build the benchpod-local sidecar
+        working-directory: benchpod-desktop
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
+            -o desktop/src-tauri/binaries/benchpod-local-${{ matrix.target }}${{ matrix.ext }} ./cmd/benchpod-local
+      - name: Build the desktop app
+        working-directory: benchpod-desktop/desktop
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          npm ci
+          npx tauri build --target "$TARGET" --config "{\"version\":\"$VERSION\"}"
+      # GitHub turns a space in an asset name into a dot, so the files are renamed here and
+      # SHA256SUMS lists the names people will actually download.
+      - name: Collect the files
+        working-directory: benchpod-desktop
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir out
+          cp "desktop/src-tauri/binaries/benchpod-local-${TARGET}${{ matrix.ext }}" \
+             "out/benchpod-local-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          bundle="desktop/src-tauri/target/${TARGET}/release/bundle"
+          find "$bundle" -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \
+               -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -print0 |
+            while IFS= read -r -d '' f; do
+              name=$(basename "$f"); cp "$f" "out/${name// /.}"
+            done
+          ls -l out
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchpod-desktop-${{ matrix.target }}
+          path: benchpod-desktop/out/*
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, desktop]
+    if: needs.prepare.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: benchpod-desktop-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -- * > ../SHA256SUMS
+          mv ../SHA256SUMS .
+          cat SHA256SUMS
+      - name: Draft release
+        id: release
+        run: |
+          id=$(gh api "repos/$GH_REPO/releases" --paginate \
+                 --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          if [ -z "$id" ]; then
+            notes="Install instructions: https://github.com/$GH_REPO#install
+
+          SHA256SUMS lists a checksum for every file here: \`sha256sum -c SHA256SUMS --ignore-missing\`."
+            id=$(gh api "repos/$GH_REPO/releases" -X POST \
+                   -f tag_name="$TAG" -f name="BenchPod Desktop $VERSION" -f body="$notes" \
+                   -F draft=true -F prerelease=false --jq .id)
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+      - name: Upload
+        working-directory: dist
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          for f in *; do
+            # A retried release already has the asset, and GitHub refuses a second one by name.
+            old=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate \
+                    --jq ".[] | select(.name == \"$f\") | .id")
+            if [ -n "$old" ]; then gh api -X DELETE "repos/$GH_REPO/releases/assets/$old"; fi
+            gh api -X POST -H "Content-Type: application/octet-stream" \
+              "https://uploads.github.com/repos/$GH_REPO/releases/$RELEASE_ID/assets?name=$f" \
+              --input "$f" --jq .browser_download_url
+          done

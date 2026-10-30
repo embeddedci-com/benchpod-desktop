@@ -20,7 +20,7 @@ export function SettingsPanel({ state, onSaved }: { state: AppState; onSaved: (s
   const pickProvider = (id: string | null) => {
     const p = state.presets.find((x) => x.id === id)
     if (!p) return
-    set({ provider: p.id, base_url: p.base_url || s.base_url, model: p.default_model ?? '' })
+    set({ provider: p.id, base_url: p.base_url || '', model: p.default_model ?? '' })
     setModels(p.id === 'openrouter' ? state.recommended : [])
   }
 
@@ -88,7 +88,7 @@ export function SettingsPanel({ state, onSaved }: { state: AppState; onSaved: (s
         </Text>
       ) : (
         <Text size="xs" c="dimmed">
-          What you type and what the tools return (logs, captures) are sent to {preset?.name ?? 'this provider'} to run the model.
+          What you type and what the tools return (logs, captures) are sent to {preset?.id === 'custom' ? 'that server' : (preset?.name ?? 'this provider')} to run the model.
         </Text>
       )}
       {preset?.id === 'custom' || preset?.local ? (

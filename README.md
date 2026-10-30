@@ -51,7 +51,22 @@ Secret Service on Linux), never in a file the app writes.
 
 ## Install
 
-Release builds are on the [releases page](https://github.com/embeddedci-com/benchpod-desktop/releases).
+On a Mac, with [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask embeddedci-com/tap/benchpod-desktop
+```
+
+Windows and Linux installers are on the [releases page](https://github.com/embeddedci-com/benchpod-desktop/releases).
+They are not code-signed yet: on Windows, SmartScreen asks you to confirm the first start. On a Mac,
+the cask removes the download quarantine for you.
+
+## First start
+
+1. Choose a model: a local one (start Ollama or LM Studio first), or a provider such as
+   OpenRouter, with your key.
+2. Choose your pod: on your network, over USB, or in the cloud with `benchpod login`.
+3. Ask. It asks before it changes power, firmware or outputs.
 
 ## Build from source
 
@@ -95,6 +110,15 @@ runs `benchpod-local` and the webapp with hot reload on http://localhost:5176.
 ```bash
 make test
 ```
+
+## Release
+
+```bash
+scripts/release.sh 0.1.0
+```
+
+tags `v0.1.0`. CI runs the tests, builds every installer and makes a draft release; publishing the
+draft updates the Homebrew cask (the repository needs the `TAP_GITHUB_TOKEN` secret).
 
 ## Repository layout
 

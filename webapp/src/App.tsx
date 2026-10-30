@@ -64,7 +64,7 @@ export function App() {
     </Badge>
   ) : state.mcp.state === 'installing' || state.mcp.state === 'starting' || connecting ? (
     <Badge color="blue" variant="light" leftSection={<Loader size={10} />}>
-      {state.mcp.state === 'installing' ? 'installing the BenchPod tools…' : 'connecting…'}
+      {state.mcp.state === 'installing' ? 'installing the BenchPod tools…' : connecting ? 'connecting…' : 'starting the BenchPod tools…'}
     </Badge>
   ) : (
     <Tooltip label={state.pod.error || state.mcp.error || 'Connects on the first tool call, or click to connect now'} multiline w={320}>
@@ -83,7 +83,7 @@ export function App() {
       label={
         preset?.local
           ? 'Runs on this computer: nothing you type leaves it.'
-          : `Your messages and the tool results (logs, captures) are sent to ${preset?.name ?? 'the provider'} to run the model.`
+          : `Your messages and the tool results (logs, captures) are sent to ${preset?.id === 'custom' ? 'your server' : (preset?.name ?? 'the provider')} to run the model.`
       }
     >
       <Text size="xs" c="dimmed" style={{ cursor: 'help' }}>
