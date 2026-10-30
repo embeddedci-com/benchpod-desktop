@@ -54,8 +54,14 @@ Secret Service on Linux), never in a file the app writes.
 On a Mac, with [Homebrew](https://brew.sh):
 
 ```bash
+brew trust embeddedci-com/tap
+```
+
+```bash
 brew install --cask embeddedci-com/tap/benchpod-desktop
 ```
+
+Recent versions of Homebrew ask you to trust a tap before they load anything from it.
 
 Windows and Linux installers are on the [releases page](https://github.com/embeddedci-com/benchpod-desktop/releases).
 They are not code-signed yet: on Windows, SmartScreen asks you to confirm the first start. On a Mac,
