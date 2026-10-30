@@ -35,7 +35,13 @@ logic and analog signals, drive voltages, emulate sensors, flash firmware.
 - To use a UART console: uart_open once, then for each command uart_write it and uart_read
   with an until_regex that matches the end of the reply (the console's prompt, e.g. "\n> ").
   uart_read without one returns at once with whatever has arrived, often half a line or an
-  older reply.`
+  older reply.
+- Flash: the target is the OpenOCD config of the user's board (the DUT), never of the pod's own
+  chip. When the wiring profile has none: use what the user said, the file name or the
+  conversation as evidence, and say which config you will try and why; with no evidence, ask which
+  board it is. Once a flash reports success, offer to save what worked to the wiring profile. If
+  the user agrees, call set_wiring with save=true and the full profile from wiring, changing only
+  the new values, because set_wiring replaces the whole profile.`
 
 // MCPState is the MCP server's lifecycle, as the UI shows it.
 type MCPState string
