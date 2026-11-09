@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -38,6 +39,29 @@ var Presets = []Preset{
 	{ID: "ollama", Name: "Ollama (local)", BaseURL: "http://localhost:11434/v1", Local: true},
 	{ID: "lmstudio", Name: "LM Studio (local)", BaseURL: "http://localhost:1234/v1", Local: true},
 	{ID: "custom", Name: "Other OpenAI-compatible server", Local: false},
+}
+
+// IsCloud says whether baseURL is one of the hosted providers above (OpenRouter, Anthropic,
+// OpenAI). A custom server is the user's own and is not.
+func IsCloud(baseURL string) bool {
+	host := hostOf(baseURL)
+	if host == "" {
+		return false
+	}
+	for _, p := range Presets {
+		if p.NeedKey && hostOf(p.BaseURL) == host {
+			return true
+		}
+	}
+	return false
+}
+
+func hostOf(u string) string {
+	pu, err := url.Parse(strings.TrimSpace(u))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(pu.Hostname())
 }
 
 // Get returns the preset with id.

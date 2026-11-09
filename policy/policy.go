@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/embeddedci-com/benchpod-desktop/agent"
 )
@@ -164,4 +165,33 @@ func podCheck(l Limits, allowed func(string) bool) func(string, map[string]any) 
 		}
 		return check(name, args)
 	}
+}
+
+// OfflineDeny are the tools that only work through embeddedci.com.
+var OfflineDeny = []string{"cloud_list_devices", "vision_cloud_boards"}
+
+// Offline narrows p for offline mode: no tool reaches embeddedci.com. The cloud listings are
+// hidden, and a flash of an uploaded build or a connection to an 'embeddedci:' device is refused.
+func Offline(p agent.Policy) agent.Policy {
+	p.Deny = append(append([]string{}, p.Deny...), OfflineDeny...)
+	inner := p.Check
+	p.Check = func(name string, args map[string]any) error {
+		if name == "flash" {
+			for _, k := range []string{"build", "repo", "ref", "artifact"} {
+				if v, _ := args[k].(string); v != "" {
+					return errors.New("offline mode: flashing a build from embeddedci.com is turned off; flash a local file instead")
+				}
+			}
+		}
+		for _, v := range args {
+			if s, ok := v.(string); ok && strings.HasPrefix(strings.ToLower(strings.TrimSpace(s)), "embeddedci:") {
+				return errors.New("offline mode: devices on embeddedci.com are turned off")
+			}
+		}
+		if inner != nil {
+			return inner(name, args)
+		}
+		return nil
+	}
+	return p
 }

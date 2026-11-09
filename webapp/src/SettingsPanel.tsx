@@ -8,10 +8,13 @@ import { api, type AppState, type ModelInfo, type Settings } from './api'
 export function SettingsPanel({ state, onSaved }: { state: AppState; onSaved: (s: AppState) => void }) {
   const [s, setS] = useState<Settings>(state.settings)
   const [key, setKey] = useState('')
-  const [models, setModels] = useState<ModelInfo[]>(state.recommended)
+  const [models, setModels] = useState<ModelInfo[]>(state.settings.provider === 'openrouter' ? state.recommended : [])
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const preset = state.presets.find((p) => p.id === s.provider)
+  const offline = state.offline_forced || !!s.offline
+  // Offline: only a model on this computer or a server on your own network.
+  const presets = offline ? state.presets.filter((p) => !p.need_key) : state.presets
 
   useEffect(() => setS(state.settings), [state.settings])
 
@@ -74,10 +77,27 @@ export function SettingsPanel({ state, onSaved }: { state: AppState; onSaved: (s
 
   return (
     <Stack gap="sm">
+      <Switch
+        label="Offline: nothing leaves this computer and your network"
+        description={
+          state.offline_forced
+            ? 'Turned on for this computer (BENCHPOD_OFFLINE).'
+            : 'No hosted model providers, no embeddedci.com, no downloads. The BenchPod tools must already be installed.'
+        }
+        checked={offline}
+        disabled={state.offline_forced}
+        onChange={(e) => {
+          const on = e.currentTarget.checked
+          set({ offline: on })
+          if (on && preset?.need_key) pickProvider('ollama')
+        }}
+      />
+
+      <Divider my="xs" />
       <Text fw={600}>Model</Text>
       <Select
         label="Where the model runs"
-        data={state.presets.map((p) => ({ value: p.id, label: p.name }))}
+        data={presets.map((p) => ({ value: p.id, label: p.name }))}
         value={s.provider}
         onChange={pickProvider}
         allowDeselect={false}
@@ -146,7 +166,11 @@ export function SettingsPanel({ state, onSaved }: { state: AppState; onSaved: (s
       <Text fw={600}>BenchPod</Text>
       <TextInput
         label="Connection"
-        description="Empty finds the pod on your network. Or: an address (192.168.1.50), usb, usb:<name>, embeddedci:<name>"
+        description={
+          offline
+            ? 'Empty finds the pod on your network. Or: an address (192.168.1.50), usb, usb:<name>'
+            : 'Empty finds the pod on your network. Or: an address (192.168.1.50), usb, usb:<name>, embeddedci:<name>'
+        }
         value={s.connection}
         onChange={(e) => set({ connection: e.currentTarget.value })}
       />

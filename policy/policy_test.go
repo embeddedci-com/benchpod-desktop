@@ -83,3 +83,28 @@ func contains(l []string, s string) bool {
 	}
 	return false
 }
+
+func TestOfflineRefusesCloud(t *testing.T) {
+	p := Offline(Desktop(Limits{}, true))
+	for _, name := range OfflineDeny {
+		found := false
+		for _, d := range p.Deny {
+			found = found || d == name
+		}
+		if !found {
+			t.Errorf("%s not denied offline", name)
+		}
+	}
+	if err := p.Check("flash", map[string]any{"build": "latest"}); err == nil {
+		t.Error("flash of an uploaded build allowed offline")
+	}
+	if err := p.Check("flash", map[string]any{"file": "fw.elf"}); err != nil {
+		t.Errorf("local flash refused offline: %v", err)
+	}
+	if err := p.Check("vision_connect", map[string]any{"connection": "embeddedci:cam"}); err == nil {
+		t.Error("cloud vision board allowed offline")
+	}
+	if err := p.Check("dac_output", map[string]any{"volts": 1.0}); err != nil {
+		t.Errorf("dac_output refused offline: %v", err)
+	}
+}

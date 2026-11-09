@@ -11,6 +11,7 @@ export type Settings = {
   confirm_risky: boolean
   limits: Limits
   dut_notes: string
+  offline?: boolean
 }
 
 export type Preset = {
@@ -36,6 +37,8 @@ export type AppState = {
   mcp: { state: 'stopped' | 'installing' | 'starting' | 'ready' | 'failed'; error: string }
   pod: { connected: boolean; connection?: string; error?: string; status?: Record<string, unknown> }
   data_dir: string
+  offline: boolean
+  offline_forced: boolean
 }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {

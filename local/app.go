@@ -122,7 +122,49 @@ func (a *App) buildAgent() *agent.Agent {
 	if n := strings.TrimSpace(st.DUTNotes); n != "" {
 		system += "\n\n# About this bench (from the user)\n\n" + n
 	}
-	return &agent.Agent{Model: model, Tools: &podTools{app: a}, Policy: policy.Desktop(st.Limits, st.ConfirmRisky), System: system}
+	pol := policy.Desktop(st.Limits, st.ConfirmRisky)
+	var m agent.Model = model
+	if a.offline(st) {
+		pol = policy.Offline(pol)
+		if err := a.offlineModelErr(st); err != nil {
+			m = refusedModel{err}
+		}
+	}
+	return &agent.Agent{Model: m, Tools: &podTools{app: a}, Policy: pol, System: system}
+}
+
+// offline says whether offline mode is on: the setting, or BENCHPOD_OFFLINE in the environment
+// or the data folder's .env (for a managed install the user cannot switch back).
+func (a *App) offline(st Settings) bool { return st.Offline || a.offlineForced() }
+
+func (a *App) offlineForced() bool {
+	switch strings.ToLower(strings.TrimSpace(a.keys.Env["BENCHPOD_OFFLINE"])) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
+// offlineModelErr refuses a hosted model provider in offline mode.
+func (a *App) offlineModelErr(st Settings) error {
+	if p, ok := providers.Get(st.Provider); (ok && p.NeedKey) || providers.IsCloud(st.BaseURL) {
+		return errors.New("offline mode: hosted model providers are turned off; pick a model on this computer or a server on your network")
+	}
+	return nil
+}
+
+func offlineConnErr(conn string) error {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(conn)), "embeddedci:") {
+		return errors.New("offline mode: pods on embeddedci.com are turned off; connect over your network or USB")
+	}
+	return nil
+}
+
+// refusedModel answers every call with err (a model offline mode does not allow).
+type refusedModel struct{ err error }
+
+func (r refusedModel) Chat(context.Context, agent.ChatRequest, func(string)) (agent.Message, agent.Usage, error) {
+	return agent.Message{}, agent.Usage{}, r.err
 }
 
 // Close stops the MCP server.
@@ -155,12 +197,18 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 		return nil, err
 	}
 	st := a.store.Load()
-	name, args, err := mcpCommand(ctx, a.keys.Env, a.store.Dir(), false, a.mcpLog.Printf)
+	offline := a.offline(st)
+	if offline {
+		if err := offlineConnErr(st.Connection); err != nil {
+			return fail(err)
+		}
+	}
+	name, args, err := mcpCommand(ctx, a.keys.Env, a.store.Dir(), false, offline, a.mcpLog.Printf)
 	if err != nil {
 		a.mu.Lock()
 		a.mcpState = MCPInstalling
 		a.mu.Unlock()
-		name, args, err = mcpCommand(ctx, a.keys.Env, a.store.Dir(), true, a.mcpLog.Printf)
+		name, args, err = mcpCommand(ctx, a.keys.Env, a.store.Dir(), true, offline, a.mcpLog.Printf)
 		if err != nil {
 			return fail(err)
 		}
@@ -174,7 +222,20 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Stderr = a.mcpLog
 	cmd.Env = os.Environ()
-	if key, _ := a.keys.Get("embeddedci"); key != "" {
+	if offline {
+		// No embeddedci.com: no API key, and a config folder without the `benchpod login`
+		// session, so the server never fetches a wiring profile or a build. uv uses its cache only.
+		cfg := filepath.Join(a.store.Dir(), "offline-config")
+		_ = os.MkdirAll(cfg, 0o700)
+		var env []string
+		for _, kv := range cmd.Env {
+			k, _, _ := strings.Cut(kv, "=")
+			if k != "BENCHPOD_API_KEY" && k != "XDG_CONFIG_HOME" && k != "UV_OFFLINE" {
+				env = append(env, kv)
+			}
+		}
+		cmd.Env = append(env, "XDG_CONFIG_HOME="+cfg, "UV_OFFLINE=1")
+	} else if key, _ := a.keys.Get("embeddedci"); key != "" {
 		cmd.Env = append(cmd.Env, "BENCHPOD_API_KEY="+key) // cloud pods
 	} else if v := a.keys.Env["BENCHPOD_API_KEY"]; v != "" {
 		cmd.Env = append(cmd.Env, "BENCHPOD_API_KEY="+v)
@@ -326,15 +387,17 @@ func (a *App) serveState(w http.ResponseWriter, r *http.Request) {
 	pod := a.pod
 	a.mu.Unlock()
 	chat.WriteJSON(w, http.StatusOK, map[string]any{
-		"version":       a.Version,
-		"settings":      st,
-		"key_source":    src,
-		"presets":       providers.Presets,
-		"recommended":   providers.Recommended,
-		"model_warning": providers.SmallModelWarning(st.Model),
-		"mcp":           mcp,
-		"pod":           pod,
-		"data_dir":      a.store.Dir(),
+		"version":        a.Version,
+		"settings":       st,
+		"key_source":     src,
+		"presets":        providers.Presets,
+		"recommended":    providers.Recommended,
+		"model_warning":  providers.SmallModelWarning(st.Model),
+		"mcp":            mcp,
+		"pod":            pod,
+		"data_dir":       a.store.Dir(),
+		"offline":        a.offline(st),
+		"offline_forced": a.offlineForced(),
 	})
 }
 
@@ -349,12 +412,22 @@ func (a *App) serveSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "la_voltage is 1.8 or 3.3", http.StatusBadRequest)
 		return
 	}
+	if a.offline(st) {
+		err := a.offlineModelErr(st)
+		if err == nil {
+			err = offlineConnErr(st.Connection)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 	if err := a.store.Save(st); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	a.session.SetAgent(a.buildAgent())
-	if st.Connection != old.Connection || st.LAVoltage != old.LAVoltage {
+	if st.Connection != old.Connection || st.LAVoltage != old.LAVoltage || st.Offline != old.Offline {
 		// The MCP server takes the connection on its command line: restart it on next use.
 		a.mu.Lock()
 		t := a.tools
@@ -395,6 +468,12 @@ func (a *App) serveDeleteKey(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) serveModels(w http.ResponseWriter, r *http.Request) {
 	st := a.store.Load()
+	if a.offline(st) {
+		if err := a.offlineModelErr(st); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 	key, _ := a.keys.Get(st.Provider)
 	models, err := providers.List(r.Context(), st.BaseURL, key)
 	if err != nil {
@@ -407,6 +486,12 @@ func (a *App) serveModels(w http.ResponseWriter, r *http.Request) {
 // serveTestModel checks that the model answers and calls a tool, without the pod.
 func (a *App) serveTestModel(w http.ResponseWriter, r *http.Request) {
 	st := a.store.Load()
+	if a.offline(st) {
+		if err := a.offlineModelErr(st); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 	key, _ := a.keys.Get(st.Provider)
 	m := &agent.OpenAICompatible{BaseURL: st.BaseURL, APIKey: key, Model: st.Model}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)

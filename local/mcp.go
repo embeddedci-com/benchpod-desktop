@@ -23,8 +23,13 @@ const MCPSpec = "embeddedci-mcp>=2.13,<3"
 //  3. uvx on PATH
 //  4. a private uv in the data folder, installed on first use (no sudo, profile untouched)
 //
-// install says whether step 4 may download uv now.
-func mcpCommand(ctx context.Context, env map[string]string, dataDir string, install bool, logf func(string, ...any)) (string, []string, error) {
+// install says whether step 4 may download uv now. offline never downloads: uv runs from its
+// cache only (--offline), and with no uv the error says how to install the tools by hand.
+func mcpCommand(ctx context.Context, env map[string]string, dataDir string, install, offline bool, logf func(string, ...any)) (string, []string, error) {
+	uvArgs := []string{"--from", MCPSpec, "embeddedci-mcp"}
+	if offline {
+		uvArgs = append([]string{"--offline"}, uvArgs...)
+	}
 	if v := strings.TrimSpace(env["BENCHPOD_MCP_COMMAND"]); v != "" {
 		f := strings.Fields(v)
 		return f[0], f[1:], nil
@@ -37,12 +42,15 @@ func mcpCommand(ctx context.Context, env map[string]string, dataDir string, inst
 		return p, nil, nil
 	}
 	if p, err := lookPath("uvx", extra); err == nil {
-		return p, []string{"--from", MCPSpec, "embeddedci-mcp"}, nil
+		return p, uvArgs, nil
 	}
 	uvDir := filepath.Join(dataDir, "uv")
 	uvx := filepath.Join(uvDir, exe("uvx"))
 	if _, err := os.Stat(uvx); err == nil {
-		return uvx, []string{"--from", MCPSpec, "embeddedci-mcp"}, nil
+		return uvx, uvArgs, nil
+	}
+	if offline {
+		return "", nil, errors.New("offline mode: the BenchPod tools are not installed; install embeddedci-mcp (pip install embeddedci-mcp, from your package mirror) so it is on PATH")
 	}
 	if !install {
 		return "", nil, errors.New("the BenchPod tools are not installed yet")
@@ -51,7 +59,7 @@ func mcpCommand(ctx context.Context, env map[string]string, dataDir string, inst
 	if err := installUV(ctx, uvDir); err != nil {
 		return "", nil, fmt.Errorf("could not install uv (%v); install it yourself: https://docs.astral.sh/uv/getting-started/installation/", err)
 	}
-	return uvx, []string{"--from", MCPSpec, "embeddedci-mcp"}, nil
+	return uvx, uvArgs, nil
 }
 
 func exe(name string) string {

@@ -35,11 +35,16 @@ type Settings struct {
 	// DUTNotes is what the agent should know about the board: pinout, expected rails,
 	// firmware notes. It goes into the system prompt.
 	DUTNotes string `json:"dut_notes"`
+
+	// Offline keeps everything on this computer and its network: no cloud model provider, no
+	// embeddedci.com, no downloads. BENCHPOD_OFFLINE=1 turns it on for good (see App.offline).
+	Offline bool `json:"offline,omitempty"`
 }
 
-// DefaultSettings is the first-run state: OpenRouter preselected, confirmations on.
+// DefaultSettings is the first-run state: a model on this computer (Ollama) preselected, so
+// nothing leaves the machine until the user picks a provider; confirmations on.
 func DefaultSettings() Settings {
-	p, _ := providers.Get("openrouter")
+	p, _ := providers.Get("ollama")
 	return Settings{Provider: p.ID, BaseURL: p.BaseURL, Model: p.DefaultModel, ConfirmRisky: true,
 		Limits: policy.Limits{MaxDACVolts: 5, MaxCurrentOut: 0.024}}
 }

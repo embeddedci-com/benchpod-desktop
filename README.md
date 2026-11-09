@@ -69,10 +69,38 @@ the cask removes the download quarantine for you.
 
 ## First start
 
-1. Choose a model: a local one (start Ollama or LM Studio first), or a provider such as
+1. Choose a model: a local one (Ollama is preselected: start it first), or a provider such as
    OpenRouter, with your key.
 2. Choose your pod: on your network, over USB, or in the cloud with `benchpod login`.
 3. Ask. It asks before it changes power, firmware or outputs.
+
+## Offline use
+
+Turn on **Offline** at the top of Settings and the app keeps everything on your computer and
+your own network:
+
+- only a model on this computer or a server on your network (hosted providers are refused, also
+  a custom URL that points at one);
+- only pods on your network or USB: no `embeddedci:` devices, no builds from embeddedci.com, and
+  the BenchPod tools run without your `benchpod login` session or API key;
+- no downloads: the app does not install uv, and uv runs from its cache only.
+
+The BenchPod tools must then already be installed. Either start the app once with internet
+access (uv keeps its copy), or install the tools from your own package mirror so
+`embeddedci-mcp` is on your `PATH`:
+
+```bash
+pipx install embeddedci-mcp
+```
+
+To turn offline mode on for good on a machine, so it cannot be switched off in the app, put
+`BENCHPOD_OFFLINE=1` in a `.env` file in the app's data folder (its path is at the bottom of
+Settings), or set it in the environment.
+
+Offline mode covers the app. A pod registered to embeddedci.com connects to it by itself
+whenever its network reaches the internet. For a pod that should stay local, stop that with
+`benchpod deregister --connection <pod address>` (its data stays on the account), or keep it on
+a network without internet access or on USB.
 
 ## Build from source
 
