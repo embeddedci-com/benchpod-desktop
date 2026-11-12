@@ -10,7 +10,9 @@ import react from '@vitejs/plugin-react'
 // The chat and result views are benchpod-ui's source, next to this repository, linked by path.
 // That source resolves bare imports against its own node_modules, so the singletons are
 // deduped to ours: two Reacts break hooks, two Mantines split the theme provider.
-const bpui = path.resolve(__dirname, '../../benchpod-ui/src')
+// BPUI_SRC points it at another checkout (a benchpod-ui worktree) while both change together;
+// the path below stays the default.
+const bpui = process.env.BPUI_SRC ? path.resolve(process.env.BPUI_SRC) : path.resolve(__dirname, '../../benchpod-ui/src')
 
 export default defineConfig({
   plugins: [react()],
