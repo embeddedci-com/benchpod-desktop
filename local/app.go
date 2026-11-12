@@ -19,6 +19,7 @@ import (
 	"github.com/embeddedci-com/benchpod-desktop/chat"
 	"github.com/embeddedci-com/benchpod-desktop/policy"
 	"github.com/embeddedci-com/benchpod-desktop/providers"
+	"github.com/embeddedci-com/benchpod-desktop/sensors"
 )
 
 // SystemPrompt is the desktop agent's own prompt. The MCP server's instructions follow it.
@@ -80,6 +81,9 @@ type App struct {
 	updater   podUpdater
 	// output follows the routed DAC output for the policy's control-loop check.
 	output policy.Output
+
+	sensorDefs sensorStore      // the user's sensor definitions and stimuli
+	sensorLib  *sensors.Service // the public sensor library
 }
 
 type podState struct {
@@ -101,6 +105,10 @@ func NewApp(dataDir, version string, envFiles ...string) (*App, error) {
 	}
 	a := &App{Version: version, store: store, keys: NewKeys(envFiles...), mcpState: MCPStopped, mcpLog: newRingLog(200), actions: actions}
 	a.waveforms.dir = filepath.Join(dataDir, "waveforms")
+	a.sensorDefs.dir = filepath.Join(dataDir, "sensors")
+	if a.sensorLib, err = sensors.New(sensors.Config{Offline: func() bool { return a.offline(a.store.Load()) }}); err != nil {
+		return nil, err
+	}
 	var history []agent.Message
 	if b, err := os.ReadFile(a.conversationPath()); err == nil {
 		_ = json.Unmarshal(b, &history)
@@ -459,6 +467,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/mcp/log", func(w http.ResponseWriter, r *http.Request) {
 		chat.WriteJSON(w, http.StatusOK, map[string]any{"lines": a.mcpLog.Lines()})
 	})
+	a.mountSensors(mux)
 	a.session.Mount(mux, "/api/chat")
 	return mux
 }

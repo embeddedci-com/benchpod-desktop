@@ -40,6 +40,10 @@ type Settings struct {
 	// embeddedci.com, no downloads. BENCHPOD_OFFLINE=1 turns it on for good (see App.offline).
 	Offline bool `json:"offline,omitempty"`
 
+	// SensorLibrary is the public sensor library version the Sensors view uses: "" (the version
+	// built into the app), "latest" or X.Y.Z (downloaded from GitHub, then cached).
+	SensorLibrary string `json:"sensor_library,omitempty"`
+
 	// PodSetupDone: the user found the pod and set its I/O voltage once (Find your pod).
 	PodSetupDone bool `json:"pod_setup_done,omitempty"`
 	// ModelSkipped: the user chose the bench controls without the agent for now.
