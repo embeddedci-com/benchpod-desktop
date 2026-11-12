@@ -3,6 +3,7 @@ import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Tex
 import { CaptureView, ChatView, ConsoleTerminal, GeneratorControls, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
+import { WiringTab } from './WiringTab'
 
 const SUGGESTIONS = [
   'What is on my bench? Check the pod status and the wiring.',
@@ -17,6 +18,9 @@ const fetchCapture = (async (kind: string) => {
   if (!r.ok) throw new Error((await r.text()).trim() || `HTTP ${r.status}`)
   return r.json()
 }) as FetchCapture
+
+/** Tools after which the Wiring tab loads the profile again. */
+const WIRING_TOOLS = /^(set_wiring|set_la_voltage)$/
 
 /** Tools after which the capture view loads the last capture again. */
 const CAPTURE_TOOLS = /^(capture_la|capture_adc|capture_correlated|decode_la)$/
@@ -34,6 +38,10 @@ export function App() {
   const tools = useTools('/api/chat')
   // The bench controls beside the chat: the same tools as the agent, through the same policy.
   const bench = useBenchCall('/api/tool')
+  const agentWiring = useMemo(
+    () => chat.items.filter((it) => it.kind === 'tool' && !!it.result && WIRING_TOOLS.test(it.call.name)).length,
+    [chat.items],
+  )
   // The waveform library in the data folder; a waveform plays through the replay tool (and the policy).
   const library = useMemo<WaveformLibrary>(
     () => ({
@@ -176,7 +184,10 @@ export function App() {
               </Stack>
             }
             footer={footer}
-            panelTabs={[{ value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> }]}
+            panelTabs={[
+              { value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> },
+              { value: 'wiring', label: 'Wiring', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
+            ]}
             panelControls={{
               captures: <CaptureView call={bench.call} fetchCapture={fetchCapture} refreshKey={agentCaptures} />,
               console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,

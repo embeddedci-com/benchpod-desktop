@@ -42,8 +42,9 @@ logic and analog signals, drive voltages, emulate sensors, flash firmware.
   chip. When the wiring profile has none: use what the user said, the file name or the
   conversation as evidence, and say which config you will try and why; with no evidence, ask which
   board it is. Once a flash reports success, offer to save what worked to the wiring profile. If
-  the user agrees, call set_wiring with save=true and the full profile from wiring, changing only
-  the new values, because set_wiring replaces the whole profile.`
+  the user agrees, call set_wiring with the full profile from wiring, changing only the new values,
+  because set_wiring replaces the whole profile. The app keeps it on this computer; the user can
+  also edit it in the Wiring tab beside the chat.`
 
 // MCPState is the MCP server's lifecycle, as the UI shows it.
 type MCPState string
@@ -235,6 +236,9 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Stderr = a.mcpLog
 	cmd.Env = os.Environ()
+	if p, ok := a.wiringEnv(); ok {
+		cmd.Env = append(cmd.Env, "BENCHPOD_WIRING="+p)
+	}
 	if offline {
 		// No embeddedci.com: no API key, and a config folder without the `benchpod login`
 		// session, so the server never fetches a wiring profile or a build. uv uses its cache only.
@@ -335,11 +339,29 @@ func (p *podTools) Call(ctx context.Context, name string, args map[string]any) (
 	if err != nil {
 		return agent.ToolResult{Text: err.Error(), IsError: true}, nil
 	}
+	p.app.prepareCall(name, args)
 	t0 := time.Now()
 	res, err := t.Call(ctx, name, args)
 	p.app.logAction("agent", name, args, res, err, time.Since(t0))
-	p.app.console.record("agent", name, args, res, err)
+	p.app.afterCall("agent", name, args, res, err)
 	return res, err
+}
+
+// prepareCall adjusts a call for this app before it runs, the agent's and the bench controls'
+// alike. set_wiring keeps the profile on this computer (afterCall); offline, it never also tries
+// to store it on embeddedci.com.
+func (a *App) prepareCall(name string, args map[string]any) {
+	if name == "set_wiring" && a.offline(a.store.Load()) {
+		delete(args, "save")
+	}
+}
+
+// afterCall follows up on a call that ran: the console log, and the wiring profile to keep.
+func (a *App) afterCall(source, name string, args map[string]any, res agent.ToolResult, err error) {
+	a.console.record(source, name, args, res, err)
+	if name == "set_wiring" && err == nil && !res.IsError {
+		a.saveWiring(res.Structured)
+	}
 }
 
 func (p *podTools) Instructions() string {
