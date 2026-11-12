@@ -84,6 +84,7 @@ type App struct {
 
 	sensorDefs sensorStore      // the user's sensor definitions and stimuli
 	sensorLib  *sensors.Service // the public sensor library
+	saveDir    string           // where /api/files/save writes ("" = the Downloads folder)
 }
 
 type podState struct {

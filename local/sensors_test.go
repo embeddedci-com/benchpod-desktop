@@ -323,3 +323,22 @@ func TestSensorCommandOnlySensorCommands(t *testing.T) {
 		t.Fatalf("log args: %v", got)
 	}
 }
+
+func TestSaveFileNeverOverwrites(t *testing.T) {
+	app, c, _ := newSensorApp(t)
+	app.saveDir = t.TempDir()
+	var out struct{ Path string }
+	for i, want := range []string{"bme280.yaml", "bme280 (2).yaml"} {
+		if st, _, raw := c.do("POST", "/api/files/save?name=bme280.yaml", []byte("v"+string(rune('1'+i))), &out); st != 200 || filepath.Base(out.Path) != want {
+			t.Fatalf("save %d: %d %s", i, st, raw)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(app.saveDir, "bme280.yaml")); string(b) != "v1" {
+		t.Fatalf("first file changed: %q", b)
+	}
+	for _, bad := range []string{"../x.yaml", ".hidden", "", "a%2Fb.yaml"} {
+		if st, _, _ := c.do("POST", "/api/files/save?name="+bad, []byte("x"), nil); st != 400 {
+			t.Fatalf("name %q: %d", bad, st)
+		}
+	}
+}

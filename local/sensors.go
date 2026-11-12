@@ -259,6 +259,7 @@ func (a *App) mountSensors(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/sensor-library/settings", a.serveSensorLibrarySettings)
 	mux.HandleFunc("PUT /api/sensor-library/settings", a.serveSetSensorLibrary)
 	mux.HandleFunc("POST /api/sensors/command", a.serveSensorCommand)
+	mux.HandleFunc("POST /api/files/save", a.serveSaveFile)
 }
 
 func sensorError(w http.ResponseWriter, status int, code, msg string) {
