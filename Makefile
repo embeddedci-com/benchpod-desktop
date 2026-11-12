@@ -62,8 +62,21 @@ desktop-sidecar: local-webapp
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(GO_LDFLAGS)" \
 		-o desktop/src-tauri/binaries/benchpod-local-$(RUST_TARGET)$(SIDECAR_EXT) ./cmd/benchpod-local
 
-desktop: desktop-sidecar
+# The benchpod CLI goes in as a second sidecar: the app runs its `flash-self --network` to update
+# the pod's own firmware. Built from ../benchpod-cli (BENCHPOD_CLI_DIR); macOS needs cgo (IOKit).
+BENCHPOD_CLI_DIR ?= ../benchpod-cli
+CLI_CGO := $(if $(findstring darwin,$(RUST_TARGET)),1,0)
+CLI_VERSION = $(shell git -C $(BENCHPOD_CLI_DIR) describe --tags --always 2>/dev/null | sed 's/^v//')
+
+.PHONY: desktop-cli
+desktop-cli:
+	@test -d $(BENCHPOD_CLI_DIR)/cmd/benchpod-cli || { echo "benchpod-cli is not checked out at $(BENCHPOD_CLI_DIR): git clone https://github.com/embeddedci-com/benchpod-cli $(BENCHPOD_CLI_DIR)"; exit 1; }
+	mkdir -p desktop/src-tauri/binaries
+	cd $(BENCHPOD_CLI_DIR) && CGO_ENABLED=$(CLI_CGO) go build -trimpath -ldflags "-s -w -X main.version=$(CLI_VERSION)" \
+		-o $(CURDIR)/desktop/src-tauri/binaries/benchpod-$(RUST_TARGET)$(SIDECAR_EXT) ./cmd/benchpod-cli
+
+desktop: desktop-sidecar desktop-cli
 	cd desktop && ([ -d node_modules ] || npm ci) && npx tauri build $(TAURI_ARGS)
 
-desktop-dev: desktop-sidecar
+desktop-dev: desktop-sidecar desktop-cli
 	cd desktop && ([ -d node_modules ] || npm ci) && npx tauri dev
