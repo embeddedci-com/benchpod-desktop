@@ -388,6 +388,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/pod/connect", a.servePodConnect)
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/console", a.serveConsole)
+	mux.HandleFunc("GET /api/capture/{kind}", a.serveCapture)
 	mux.HandleFunc("POST /api/console/clear", func(w http.ResponseWriter, r *http.Request) {
 		a.console.clear()
 		w.WriteHeader(http.StatusNoContent)

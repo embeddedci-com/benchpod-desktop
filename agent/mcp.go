@@ -117,6 +117,26 @@ func (m *MCPTools) Call(ctx context.Context, name string, args map[string]any) (
 	return toolResult(res), nil
 }
 
+// ReadResource returns the text of an MCP resource (the BenchPod server's benchpod://capture/la,
+// say). A started read runs to its end, like a tool call.
+func (m *MCPTools) ReadResource(ctx context.Context, uri string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CallTimeout)
+	defer cancel()
+	res, err := m.session.ReadResource(ctx, &mcp.ReadResourceParams{URI: uri})
+	if err != nil {
+		return "", err
+	}
+	var parts []string
+	for _, c := range res.Contents {
+		if c.Text != "" {
+			parts = append(parts, c.Text)
+		} else if len(c.Blob) > 0 {
+			parts = append(parts, string(c.Blob))
+		}
+	}
+	return strings.Join(parts, ""), nil
+}
+
 func toolResult(res *mcp.CallToolResult) ToolResult {
 	var parts []string
 	for _, c := range res.Content {

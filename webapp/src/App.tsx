@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { ChatView, ConsoleTerminal, PowerControls, useBenchCall, useChat, useTools } from '@bpui'
+import { CaptureView, ChatView, ConsoleTerminal, PowerControls, useBenchCall, useChat, useTools, type FetchCapture } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -10,6 +10,16 @@ const SUGGESTIONS = [
   'Capture the UART and I2C lines for 200 ms and tell me what the firmware does.',
   'Measure the target rail current while the board idles.',
 ]
+
+/** The last capture in full, from benchpod-local (the MCP server's capture resources). */
+const fetchCapture = (async (kind: string) => {
+  const r = await fetch(`/api/capture/${kind}`)
+  if (!r.ok) throw new Error((await r.text()).trim() || `HTTP ${r.status}`)
+  return r.json()
+}) as FetchCapture
+
+/** Tools after which the capture view loads the last capture again. */
+const CAPTURE_TOOLS = /^(capture_la|capture_adc|capture_correlated|decode_la)$/
 
 function needsSetup(s: AppState): boolean {
   const p = s.presets.find((x) => x.id === s.settings.provider)
@@ -24,6 +34,11 @@ export function App() {
   const tools = useTools('/api/chat')
   // The bench controls beside the chat: the same tools as the agent, through the same policy.
   const bench = useBenchCall('/api/tool')
+  // The agent's captures show in the capture view: it reloads after each capture tool result.
+  const agentCaptures = useMemo(
+    () => chat.items.filter((it) => it.kind === 'tool' && !!it.result && CAPTURE_TOOLS.test(it.call.name)).length,
+    [chat.items],
+  )
 
   const refresh = useCallback(async () => setState(await api.state()), [])
   useEffect(() => {
@@ -150,6 +165,7 @@ export function App() {
             }
             footer={footer}
             panelControls={{
+              captures: <CaptureView call={bench.call} fetchCapture={fetchCapture} refreshKey={agentCaptures} />,
               console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,
               power: <PowerControls call={bench.call} />,
             }}

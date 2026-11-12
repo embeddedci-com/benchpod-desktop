@@ -43,6 +43,11 @@ The panel beside the chat drives the pod by hand, without the agent:
   pick them), type a command and press Enter (LF, CRLF or no line ending; up and down arrows go
   through what you typed). The agent's console reads and writes show here too, in order; while the
   agent runs, the terminal leaves the reading to it.
+- **Captures**: logic (14 channels), analog, or both on one time axis, at the length and rate you
+  pick, optionally waiting for an edge or level on an LA channel. The capture is drawn in full:
+  drag to zoom, double-click to reset, pick which channels to show. Decode UART, I2C or SPI from it
+  (the channels and baud come from the wiring) as a table and as labels on the waveform. The
+  agent's captures and decodes show here too. Needs embeddedci-mcp 2.13.10 or later.
 - **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
   and the current the board draws, live, with the last minute as a chart.
 
