@@ -72,6 +72,16 @@ export const api = {
   testModel: () => req<{ ok: boolean; message: string; ms: number }>('POST', '/api/test-model'),
   connectPod: () => req<AppState['pod']>('POST', '/api/pod/connect'),
   mcpLog: () => req<{ lines: string[] }>('GET', '/api/mcp/log'),
+  firmware: () => req<{ files: { name: string; path: string; size: number; modified: string }[] }>('GET', '/api/firmware'),
+  uploadFirmware: async (file: File) => {
+    const r = await fetch(`/api/firmware?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: file,
+    })
+    if (!r.ok) throw new Error((await r.text()).trim() || `HTTP ${r.status}`)
+    return (await r.json()) as { name: string; path: string; size: number; modified: string }
+  },
   waveforms: () => req<{ waveforms: WaveformMeta[] }>('GET', '/api/waveforms'),
   createWaveform: (w: { name: string; unit: 'V' | 'mA'; sample_rate_hz: number; samples: number[] }) => req<WaveformMeta>('POST', '/api/waveforms', w),
   waveformFromCapture: (name: string) => req<WaveformMeta>('POST', '/api/waveforms/from-capture', { name }),

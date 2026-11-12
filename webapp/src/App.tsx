@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { CaptureView, ChatView, ConsoleTerminal, GeneratorControls, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type WaveformLibrary } from '@bpui'
+import { CaptureView, ChatView, ConsoleTerminal, FlashControls, GeneratorControls, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -54,6 +54,8 @@ export function App() {
     }),
     [bench.call],
   )
+  // Firmware files the Flash tab uploads into the data folder, for the flash tool to read.
+  const firmware = useMemo<FirmwareStore>(() => ({ upload: api.uploadFirmware, recent: async () => (await api.firmware()).files }), [])
   // The agent's captures show in the capture view: it reloads after each capture tool result.
   const agentCaptures = useMemo(
     () => chat.items.filter((it) => it.kind === 'tool' && !!it.result && CAPTURE_TOOLS.test(it.call.name)).length,
@@ -186,6 +188,7 @@ export function App() {
             footer={footer}
             panelTabs={[
               { value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> },
+              { value: 'flash', label: 'Flash', content: <FlashControls call={bench.call} firmware={firmware} /> },
               { value: 'wiring', label: 'Wiring', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
             ]}
             panelControls={{

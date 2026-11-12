@@ -433,6 +433,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/console", a.serveConsole)
 	mux.HandleFunc("GET /api/capture/{kind}", a.serveCapture)
+	mux.HandleFunc("GET /api/firmware", a.serveFirmwareList)
+	mux.HandleFunc("POST /api/firmware", a.serveFirmwareUpload)
 	mux.HandleFunc("GET /api/waveforms", a.serveWaveforms)
 	mux.HandleFunc("POST /api/waveforms", a.serveCreateWaveform)
 	mux.HandleFunc("POST /api/waveforms/from-capture", a.serveWaveformFromCapture)

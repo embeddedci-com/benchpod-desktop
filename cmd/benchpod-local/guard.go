@@ -17,9 +17,9 @@ import (
 //     rebinding) sends its own name as Host and is refused, so it can never read a response.
 //   - A request that changes something must come from this origin exactly, or carry no Origin
 //     at all (curl). Otherwise a page on another localhost port could drive the pod.
-//   - A change with a body under /api must say it is JSON: a browser sends a cross-site
-//     text/plain POST without asking first; application/json always needs a preflight, which
-//     this server never grants.
+//   - A change with a body under /api must say it is JSON (or, for a firmware upload, raw bytes):
+//     a browser sends a cross-site text/plain POST without asking first; application/json and
+//     application/octet-stream always need a preflight, which this server never grants.
 //   - No other site may frame the app, so it cannot be clickjacked.
 func guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +36,7 @@ func guard(next http.Handler) http.Handler {
 				http.Error(w, "cross-origin request refused", http.StatusForbidden)
 				return
 			}
-			if strings.HasPrefix(r.URL.Path, "/api/") && hasBody(r) && !isJSON(r.Header.Get("Content-Type")) {
+			if strings.HasPrefix(r.URL.Path, "/api/") && hasBody(r) && !preflighted(r.Header.Get("Content-Type")) {
 				http.Error(w, "send the request body as application/json", http.StatusUnsupportedMediaType)
 				return
 			}
@@ -49,9 +49,11 @@ func hasBody(r *http.Request) bool {
 	return r.ContentLength > 0 || (r.ContentLength < 0 && r.Body != nil && r.Body != http.NoBody)
 }
 
-func isJSON(contentType string) bool {
+// preflighted says whether a browser must ask (CORS preflight) before sending this body type
+// cross-site: JSON for the API, raw bytes for a firmware upload.
+func preflighted(contentType string) bool {
 	mt, _, err := mime.ParseMediaType(contentType)
-	return err == nil && mt == "application/json"
+	return err == nil && (mt == "application/json" || mt == "application/octet-stream")
 }
 
 func safeMethod(m string) bool {
