@@ -52,6 +52,17 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return (await r.json()) as T
 }
 
+export type WaveformMeta = {
+  id: string
+  name: string
+  unit: 'V' | 'mA'
+  sample_rate_hz: number
+  sample_count: number
+  min: number
+  max: number
+  created: string
+}
+
 export const api = {
   state: () => req<AppState>('GET', '/api/state'),
   saveSettings: (s: Partial<Settings>) => req<AppState>('PUT', '/api/settings', s),
@@ -61,4 +72,9 @@ export const api = {
   testModel: () => req<{ ok: boolean; message: string; ms: number }>('POST', '/api/test-model'),
   connectPod: () => req<AppState['pod']>('POST', '/api/pod/connect'),
   mcpLog: () => req<{ lines: string[] }>('GET', '/api/mcp/log'),
+  waveforms: () => req<{ waveforms: WaveformMeta[] }>('GET', '/api/waveforms'),
+  createWaveform: (w: { name: string; unit: 'V' | 'mA'; sample_rate_hz: number; samples: number[] }) => req<WaveformMeta>('POST', '/api/waveforms', w),
+  waveformFromCapture: (name: string) => req<WaveformMeta>('POST', '/api/waveforms/from-capture', { name }),
+  renameWaveform: (id: string, name: string) => req<WaveformMeta>('PATCH', `/api/waveforms/${encodeURIComponent(id)}`, { name }),
+  deleteWaveform: (id: string) => req<void>('DELETE', `/api/waveforms/${encodeURIComponent(id)}`),
 }

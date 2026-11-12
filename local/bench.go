@@ -45,6 +45,9 @@ func (a *App) callManual(ctx context.Context, name string, req toolRequest) tool
 	if req.Args == nil {
 		req.Args = map[string]any{}
 	}
+	if err := a.expandLocalWaveform(name, req.Args); err != nil {
+		return toolResponse{Text: err.Error(), IsError: true, Refused: true}
+	}
 	pol := a.policy(a.store.Load())
 	if !pol.Allows(name) {
 		return toolResponse{Text: "tool " + name + " is not available here", IsError: true, Refused: true}

@@ -66,15 +66,16 @@ type App struct {
 	// start two servers.
 	connMu sync.Mutex
 
-	mu       sync.Mutex
-	tools    *agent.MCPTools
-	mcpState MCPState
-	mcpErr   string
-	mcpLog   *ringLog
-	pod      podState
-	session  *chat.Session
-	actions  *os.File
-	console  consoleLog
+	mu        sync.Mutex
+	tools     *agent.MCPTools
+	mcpState  MCPState
+	mcpErr    string
+	mcpLog    *ringLog
+	pod       podState
+	session   *chat.Session
+	actions   *os.File
+	console   consoleLog
+	waveforms waveformStore
 }
 
 type podState struct {
@@ -95,6 +96,7 @@ func NewApp(dataDir, version string, envFiles ...string) (*App, error) {
 		return nil, err
 	}
 	a := &App{Version: version, store: store, keys: NewKeys(envFiles...), mcpState: MCPStopped, mcpLog: newRingLog(200), actions: actions}
+	a.waveforms.dir = filepath.Join(dataDir, "waveforms")
 	var history []agent.Message
 	if b, err := os.ReadFile(a.conversationPath()); err == nil {
 		_ = json.Unmarshal(b, &history)
@@ -355,7 +357,7 @@ func (p *podTools) Close() error { return nil }
 // logAction writes one tool call to actions.jsonl. source is who made it: the agent, or the
 // user from the bench controls ("manual").
 func (a *App) logAction(source, name string, args map[string]any, res agent.ToolResult, err error, d time.Duration) {
-	entry := map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "source": source, "tool": name, "args": args, "ms": d.Milliseconds(), "is_error": res.IsError}
+	entry := map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "source": source, "tool": name, "args": logArgs(args), "ms": d.Milliseconds(), "is_error": res.IsError}
 	if err != nil {
 		entry["error"] = err.Error()
 	} else {
@@ -365,6 +367,26 @@ func (a *App) logAction(source, name string, args map[string]any, res agent.Tool
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	_, _ = a.actions.Write(append(b, '\n'))
+}
+
+// logArgs shortens a long list argument (a replay's samples) for the action log.
+func logArgs(args map[string]any) map[string]any {
+	var out map[string]any
+	for k, v := range args {
+		if l, ok := v.([]any); ok && len(l) > 32 {
+			if out == nil {
+				out = make(map[string]any, len(args))
+				for k2, v2 := range args {
+					out[k2] = v2
+				}
+			}
+			out[k] = fmt.Sprintf("[%d values]", len(l))
+		}
+	}
+	if out == nil {
+		return args
+	}
+	return out
 }
 
 func truncate(s string, n int) string {
@@ -389,6 +411,12 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/console", a.serveConsole)
 	mux.HandleFunc("GET /api/capture/{kind}", a.serveCapture)
+	mux.HandleFunc("GET /api/waveforms", a.serveWaveforms)
+	mux.HandleFunc("POST /api/waveforms", a.serveCreateWaveform)
+	mux.HandleFunc("POST /api/waveforms/from-capture", a.serveWaveformFromCapture)
+	mux.HandleFunc("GET /api/waveforms/{id}", a.serveWaveform)
+	mux.HandleFunc("PATCH /api/waveforms/{id}", a.serveRenameWaveform)
+	mux.HandleFunc("DELETE /api/waveforms/{id}", a.serveDeleteWaveform)
 	mux.HandleFunc("POST /api/console/clear", func(w http.ResponseWriter, r *http.Request) {
 		a.console.clear()
 		w.WriteHeader(http.StatusNoContent)

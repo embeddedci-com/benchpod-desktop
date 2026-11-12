@@ -48,6 +48,12 @@ The panel beside the chat drives the pod by hand, without the agent:
   drag to zoom, double-click to reset, pick which channels to show. Decode UART, I2C or SPI from it
   (the channels and baud come from the wiring) as a table and as labels on the waveform. The
   agent's captures and decodes show here too. Needs embeddedci-mcp 2.13.10 or later.
+- **Generator**: pick the output (3.3 V, 5 V, ±12 V or the 4-20 mA output), then drive a DC level,
+  play a sine, square or sawtooth, or play a waveform from your library, until **Stop**.
+- **Waveform library**: kept on this computer, in the data folder's `waveforms` folder. Save the
+  last analog capture (yours or the agent's) under a name, or import a CSV (one value per line, or
+  time and value columns, which give the rate). Play one as recorded or scaled to fill the
+  output; rename or delete it.
 - **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
   and the current the board draws, live, with the last minute as a chart.
 
@@ -61,7 +67,9 @@ An agent driving real hardware gets limits it cannot talk its way past. They are
 app, before a tool runs, never only in the prompt:
 
 - **Confirmations**: power, flashing, outputs and pod settings wait for your yes (on by default).
-- **Limits**: a ceiling for the DAC output voltage and the 4-20 mA loop current.
+- **Limits**: a ceiling for the DAC output voltage and the 4-20 mA loop current, for DC levels,
+  generated waveforms and replays alike (a replay scaled to fill an output counts as that output's
+  full range).
 - **Caps**: tool calls and model turns per message.
 - **Action log**: every tool call, its arguments and its result, in `actions.jsonl` in the data
   folder, with who made it: the agent, or you from the bench controls (`"source": "manual"`).
