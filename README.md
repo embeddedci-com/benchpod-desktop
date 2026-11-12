@@ -54,6 +54,11 @@ The panel beside the chat drives the pod by hand, without the agent:
   last analog capture (yours or the agent's) under a name, or import a CSV (one value per line, or
   time and value columns, which give the rate). Play one as recorded or scaled to fill the
   output; rename or delete it.
+- **Flash**: flash your board's firmware from a file (.elf, .hex or .bin) over SWD, with the OpenOCD
+  target, the reset line and the power rail from the wiring, and read OpenOCD's log. Then
+  power-cycle the board and see its boot log, and keep a target that worked in the wiring. The
+  file is copied into the data folder's `firmware` folder (the last 10 stay, to flash again).
+  OpenOCD runs on your computer: install it first (`brew install open-ocd` on a Mac).
 - **Wiring**: which board signal is on which LA channel (UART, I2C, SWD and SPI roles, and named
   signals), the target power rail, the I/O voltage, the UART baud and the OpenOCD target for
   flashing, with each channel's pull resistor and any conflict. Every control and the agent read
