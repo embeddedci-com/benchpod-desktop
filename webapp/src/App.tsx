@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActionIcon, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
+import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, Stack, Text, Title, Tooltip } from '@mantine/core'
 import { CaptureView, ChatView, ConsoleTerminal, FlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
+import { PodSetup } from './PodSetup'
 
 const SUGGESTIONS = [
   'What is on my bench? Check the pod status and the wiring.',
@@ -34,6 +35,7 @@ export function App() {
   const [state, setState] = useState<AppState | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [findOpen, setFindOpen] = useState(false)
   const chat = useChat({ base: '/api/chat' })
   const tools = useTools('/api/chat')
   // The bench controls beside the chat: the same tools as the agent, through the same policy.
@@ -121,7 +123,7 @@ export function App() {
     </Badge>
   ) : (
     <Tooltip label={state.pod.error || state.mcp.error || 'Connects on the first tool call, or click to connect now'} multiline w={320}>
-      <Badge color={state.pod.error || state.mcp.error ? 'red' : 'gray'} variant="light" style={{ cursor: 'pointer' }} onClick={connect}>
+      <Badge color={state.pod.error || state.mcp.error ? 'red' : 'gray'} variant="light" style={{ cursor: 'pointer' }} onClick={() => (state.settings.pod_setup_done && !state.pod.error ? void connect() : setFindOpen(true))}>
         {state.pod.error || state.mcp.error ? 'pod not connected · retry' : 'pod: connect'}
       </Badge>
     </Tooltip>
@@ -173,7 +175,19 @@ export function App() {
       </Group>
 
       <Box style={{ flex: 1, minHeight: 0 }}>
-        {setup ? (
+        {!state.settings.pod_setup_done ? (
+          <Box maw={620} mx="auto" p="md" style={{ overflow: 'auto', height: '100%' }}>
+            <Card withBorder p="lg">
+              <Title order={4} mb={4}>
+                Find your pod
+              </Title>
+              <PodSetup state={state} onDone={setState} />
+              <Anchor size="xs" c="dimmed" mt="md" component="button" onClick={() => void api.saveSettings({ pod_setup_done: true }).then(setState)}>
+                Skip: find it later from the pod badge at the top
+              </Anchor>
+            </Card>
+          </Box>
+        ) : setup && !state.settings.model_skipped ? (
           <Box maw={560} mx="auto" p="md" style={{ overflow: 'auto', height: '100%' }}>
             <Card withBorder p="lg">
               <Title order={4} mb={4}>
@@ -182,6 +196,9 @@ export function App() {
               <Text size="sm" c="dimmed" mb="md">
                 BenchPod Desktop works with any model that speaks the OpenAI API: one on your own computer (Ollama, LM Studio), your own account with a provider, or a server your team runs.
               </Text>
+              <Anchor size="sm" mb="md" component="button" onClick={() => void api.saveSettings({ model_skipped: true }).then(setState)}>
+                Skip: use the bench controls without the agent
+              </Anchor>
               <SettingsPanel state={state} onSaved={setState} />
             </Card>
           </Box>
@@ -190,6 +207,7 @@ export function App() {
             items={chat.items}
             running={chat.running}
             onSend={(t) => void chat.send(t)}
+            disabledReason={setup ? 'Pick a model in Settings to ask the agent. The bench controls work without one.' : undefined}
             onStop={() => void chat.stop()}
             onConfirm={(id, ok) => void chat.confirm(id, ok)}
             suggestions={SUGGESTIONS}
@@ -222,6 +240,16 @@ export function App() {
       </Box>
 
       {bench.dialog}
+
+      <Modal opened={findOpen} onClose={() => setFindOpen(false)} title="Find your pod" size="lg">
+        <PodSetup
+          state={state}
+          onDone={(s) => {
+            setState(s)
+            setFindOpen(false)
+          }}
+        />
+      </Modal>
 
       <Drawer opened={settingsOpen} onClose={() => setSettingsOpen(false)} position="right" size="md" title="Settings">
         <SettingsPanel
