@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { ChatView, useChat, useTools } from '@bpui'
+import { ChatView, PowerControls, useBenchCall, useChat, useTools } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -22,18 +22,18 @@ export function App() {
   const [connecting, setConnecting] = useState(false)
   const chat = useChat({ base: '/api/chat' })
   const tools = useTools('/api/chat')
+  // The bench controls beside the chat: the same tools as the agent, through the same policy.
+  const bench = useBenchCall('/api/tool')
 
   const refresh = useCallback(async () => setState(await api.state()), [])
   useEffect(() => {
     void refresh()
   }, [refresh])
-  // The pod connects on the first tool call; follow it while the agent runs.
+  // The pod connects on the first tool call, the agent's or a bench control's: follow it, quickly
+  // while the agent runs.
   useEffect(() => {
-    if (!chat.running) {
-      void refresh()
-      return
-    }
-    const t = setInterval(() => void refresh(), 2000)
+    void refresh()
+    const t = setInterval(() => void refresh(), chat.running ? 2000 : 5000)
     return () => clearInterval(t)
   }, [chat.running, refresh])
 
@@ -149,9 +149,12 @@ export function App() {
               </Stack>
             }
             footer={footer}
+            panelControls={{ power: <PowerControls call={bench.call} /> }}
           />
         )}
       </Box>
+
+      {bench.dialog}
 
       <Drawer opened={settingsOpen} onClose={() => setSettingsOpen(false)} position="right" size="md" title="Settings">
         <SettingsPanel

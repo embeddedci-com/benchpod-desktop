@@ -35,6 +35,17 @@ USB.
 - The agent loop (`agent/`) is provider-neutral: one OpenAI-compatible client, tools from MCP, and
   a policy that holds the safety rules.
 
+## Bench controls
+
+The panel beside the chat drives the pod by hand, without the agent:
+
+- **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
+  and the current the board draws, live, with the last minute as a chart.
+
+The controls use the same tools and the same safety settings as the agent: power, flashing and
+outputs ask first (unless you turned that off), the output limits apply, and every change goes to
+the action log. The agent reads the pod's state before it acts, so it sees what you changed.
+
 ## Safety
 
 An agent driving real hardware gets limits it cannot talk its way past. They are enforced in the
@@ -44,7 +55,7 @@ app, before a tool runs, never only in the prompt:
 - **Limits**: a ceiling for the DAC output voltage and the 4-20 mA loop current.
 - **Caps**: tool calls and model turns per message.
 - **Action log**: every tool call, its arguments and its result, in `actions.jsonl` in the data
-  folder.
+  folder, with who made it: the agent, or you from the bench controls (`"source": "manual"`).
 
 Your model key is kept in the system keychain (macOS Keychain, Windows Credential Manager, the
 Secret Service on Linux), never in a file the app writes.

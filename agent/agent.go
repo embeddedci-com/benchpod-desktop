@@ -33,6 +33,12 @@ type Policy struct {
 	MaxResultChars int
 }
 
+// Allows says whether the policy lets name run at all (Allow, then Deny).
+func (p Policy) Allows(name string) bool { return p.allowed(name) }
+
+// NeedsConfirm says whether a call to name waits for the user's yes.
+func (p Policy) NeedsConfirm(name string) bool { return contains(p.Confirm, name) }
+
 func (p Policy) allowed(name string) bool {
 	if len(p.Allow) > 0 && !contains(p.Allow, name) {
 		return false

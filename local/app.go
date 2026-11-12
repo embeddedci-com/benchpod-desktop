@@ -30,6 +30,8 @@ logic and analog signals, drive voltages, emulate sensors, flash firmware.
 - Start with status and wiring when you do not know the bench yet.
 - Say what you are about to change on the hardware before you change it. The app asks the user
   to confirm risky calls; a declined call is not an error, ask what they want instead.
+- The user can also drive the pod by hand from the bench controls beside the chat (power, console,
+  captures, outputs). Read status or power_status rather than assuming the state you left.
 - When a tool fails, read its error: it names the fix (a pin to release, a voltage to set).
 - Answer briefly. Quote the log lines or the measured values your conclusion rests on.
 - To use a UART console: uart_open once, then for each command uart_write it and uart_read
@@ -122,15 +124,22 @@ func (a *App) buildAgent() *agent.Agent {
 	if n := strings.TrimSpace(st.DUTNotes); n != "" {
 		system += "\n\n# About this bench (from the user)\n\n" + n
 	}
-	pol := policy.Desktop(st.Limits, st.ConfirmRisky)
 	var m agent.Model = model
 	if a.offline(st) {
-		pol = policy.Offline(pol)
 		if err := a.offlineModelErr(st); err != nil {
 			m = refusedModel{err}
 		}
 	}
-	return &agent.Agent{Model: m, Tools: &podTools{app: a}, Policy: pol, System: system}
+	return &agent.Agent{Model: m, Tools: &podTools{app: a}, Policy: a.policy(st), System: system}
+}
+
+// policy is the safety policy for the settings st: the agent's and the bench controls' alike.
+func (a *App) policy(st Settings) agent.Policy {
+	pol := policy.Desktop(st.Limits, st.ConfirmRisky)
+	if a.offline(st) {
+		pol = policy.Offline(pol)
+	}
+	return pol
 }
 
 // offline says whether offline mode is on: the setting, or BENCHPOD_OFFLINE in the environment
@@ -324,7 +333,7 @@ func (p *podTools) Call(ctx context.Context, name string, args map[string]any) (
 	}
 	t0 := time.Now()
 	res, err := t.Call(ctx, name, args)
-	p.app.logAction(name, args, res, err, time.Since(t0))
+	p.app.logAction("agent", name, args, res, err, time.Since(t0))
 	return res, err
 }
 
@@ -340,8 +349,10 @@ func (p *podTools) Instructions() string {
 
 func (p *podTools) Close() error { return nil }
 
-func (a *App) logAction(name string, args map[string]any, res agent.ToolResult, err error, d time.Duration) {
-	entry := map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "tool": name, "args": args, "ms": d.Milliseconds(), "is_error": res.IsError}
+// logAction writes one tool call to actions.jsonl. source is who made it: the agent, or the
+// user from the bench controls ("manual").
+func (a *App) logAction(source, name string, args map[string]any, res agent.ToolResult, err error, d time.Duration) {
+	entry := map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "source": source, "tool": name, "args": args, "ms": d.Milliseconds(), "is_error": res.IsError}
 	if err != nil {
 		entry["error"] = err.Error()
 	} else {
@@ -372,6 +383,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/models", a.serveModels)
 	mux.HandleFunc("POST /api/test-model", a.serveTestModel)
 	mux.HandleFunc("POST /api/pod/connect", a.servePodConnect)
+	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/mcp/log", func(w http.ResponseWriter, r *http.Request) {
 		chat.WriteJSON(w, http.StatusOK, map[string]any{"lines": a.mcpLog.Lines()})
 	})
