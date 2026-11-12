@@ -64,13 +64,14 @@ func (a *App) callManual(ctx context.Context, name string, req toolRequest) tool
 	if err != nil {
 		return toolResponse{Text: err.Error(), IsError: true}
 	}
+	a.prepareCall(name, req.Args)
 	t0 := time.Now()
 	res, err := t.Call(ctx, name, req.Args)
 	d := time.Since(t0)
 	if !req.Poll || !slices.Contains(policy.ReadOnly, name) {
 		a.logAction("manual", name, req.Args, res, err, d)
 	}
-	a.console.record("manual", name, req.Args, res, err)
+	a.afterCall("manual", name, req.Args, res, err)
 	if err != nil {
 		return toolResponse{Text: "tool error: " + err.Error(), IsError: true, Millis: d.Milliseconds()}
 	}

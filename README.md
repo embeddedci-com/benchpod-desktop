@@ -54,6 +54,11 @@ The panel beside the chat drives the pod by hand, without the agent:
   last analog capture (yours or the agent's) under a name, or import a CSV (one value per line, or
   time and value columns, which give the rate). Play one as recorded or scaled to fill the
   output; rename or delete it.
+- **Wiring**: which board signal is on which LA channel (UART, I2C, SWD and SPI roles, and named
+  signals), the target power rail, the I/O voltage, the UART baud and the OpenOCD target for
+  flashing, with each channel's pull resistor and any conflict. Every control and the agent read
+  it. It is kept on this computer, in `wiring.json` in the data folder; a profile the agent saves
+  with `set_wiring` lands there too.
 - **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
   and the current the board draws, live, with the last minute as a chart.
 
