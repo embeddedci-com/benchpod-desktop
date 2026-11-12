@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { ChatView, PowerControls, useBenchCall, useChat, useTools } from '@bpui'
+import { ChatView, ConsoleTerminal, PowerControls, useBenchCall, useChat, useTools } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -149,7 +149,10 @@ export function App() {
               </Stack>
             }
             footer={footer}
-            panelControls={{ power: <PowerControls call={bench.call} /> }}
+            panelControls={{
+              console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,
+              power: <PowerControls call={bench.call} />,
+            }}
           />
         )}
       </Box>

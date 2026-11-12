@@ -74,6 +74,7 @@ type App struct {
 	pod      podState
 	session  *chat.Session
 	actions  *os.File
+	console  consoleLog
 }
 
 type podState struct {
@@ -190,6 +191,7 @@ func (a *App) Close() {
 
 // startMCP (re)starts the MCP server with the current settings.
 func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
+	a.console.reset()
 	a.mu.Lock()
 	old := a.tools
 	a.tools = nil
@@ -334,6 +336,7 @@ func (p *podTools) Call(ctx context.Context, name string, args map[string]any) (
 	t0 := time.Now()
 	res, err := t.Call(ctx, name, args)
 	p.app.logAction("agent", name, args, res, err, time.Since(t0))
+	p.app.console.record("agent", name, args, res, err)
 	return res, err
 }
 
@@ -384,6 +387,11 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/test-model", a.serveTestModel)
 	mux.HandleFunc("POST /api/pod/connect", a.servePodConnect)
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
+	mux.HandleFunc("GET /api/console", a.serveConsole)
+	mux.HandleFunc("POST /api/console/clear", func(w http.ResponseWriter, r *http.Request) {
+		a.console.clear()
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /api/mcp/log", func(w http.ResponseWriter, r *http.Request) {
 		chat.WriteJSON(w, http.StatusOK, map[string]any{"lines": a.mcpLog.Lines()})
 	})
@@ -441,6 +449,7 @@ func (a *App) serveSettings(w http.ResponseWriter, r *http.Request) {
 	a.session.SetAgent(a.buildAgent())
 	if st.Connection != old.Connection || st.LAVoltage != old.LAVoltage || st.Offline != old.Offline {
 		// The MCP server takes the connection on its command line: restart it on next use.
+		a.console.reset()
 		a.mu.Lock()
 		t := a.tools
 		a.tools, a.pod, a.mcpState = nil, podState{}, MCPStopped
