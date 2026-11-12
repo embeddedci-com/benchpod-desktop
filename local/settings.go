@@ -39,6 +39,11 @@ type Settings struct {
 	// Offline keeps everything on this computer and its network: no cloud model provider, no
 	// embeddedci.com, no downloads. BENCHPOD_OFFLINE=1 turns it on for good (see App.offline).
 	Offline bool `json:"offline,omitempty"`
+
+	// PodSetupDone: the user found the pod and set its I/O voltage once (Find your pod).
+	PodSetupDone bool `json:"pod_setup_done,omitempty"`
+	// ModelSkipped: the user chose the bench controls without the agent for now.
+	ModelSkipped bool `json:"model_skipped,omitempty"`
 }
 
 // DefaultSettings is the first-run state: a model on this computer (Ollama) preselected, so

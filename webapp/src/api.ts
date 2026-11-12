@@ -12,6 +12,21 @@ export type Settings = {
   limits: Limits
   dut_notes: string
   offline?: boolean
+  pod_setup_done?: boolean
+  model_skipped?: boolean
+}
+
+/** What Find my pod found (POST /api/pod/find). */
+export type FoundPod = {
+  connected: boolean
+  connection: string
+  kind?: string
+  version?: string
+  board?: string
+  ip?: string
+  la_voltage: number | null
+  error?: string
+  tried: string[]
 }
 
 export type Preset = {
@@ -70,6 +85,7 @@ export const api = {
   deleteKey: (provider: string) => req<void>('DELETE', `/api/key?provider=${encodeURIComponent(provider)}`),
   models: () => req<{ models: ModelInfo[] }>('GET', '/api/models'),
   testModel: () => req<{ ok: boolean; message: string; ms: number }>('POST', '/api/test-model'),
+  findPod: (connection: string) => req<FoundPod>('POST', '/api/pod/find', { connection }),
   connectPod: () => req<AppState['pod']>('POST', '/api/pod/connect'),
   mcpLog: () => req<{ lines: string[] }>('GET', '/api/mcp/log'),
   firmware: () => req<{ files: { name: string; path: string; size: number; modified: string }[] }>('GET', '/api/firmware'),

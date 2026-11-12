@@ -115,10 +115,17 @@ the cask removes the download quarantine for you.
 
 ## First start
 
-1. Choose a model: a local one (Ollama is preselected: start it first), or a provider such as
-   OpenRouter, with your key.
-2. Choose your pod: on your network, over USB, or in the cloud with `benchpod login`.
-3. Ask. It asks before it changes power, firmware or outputs.
+No account and no registration: the app talks to the pod directly.
+
+1. **Find your pod**: plug it in over USB-C or into your network and press **Find my pod**. The
+   app looks on USB first, then on your network (mDNS); or type its address. Pick your board's
+   I/O voltage (3.3 V or 1.8 V): the app sets it on the pod every time it connects.
+2. **Pick a model**: a local one (Ollama is preselected: start it first), or a provider such as
+   OpenRouter, with your key. Or skip it: the bench controls work without the agent.
+3. Ask, or use the bench controls beside the chat. Both ask before they change power, firmware or
+   outputs.
+
+A pod in the cloud (`embeddedci:<name>`, after `benchpod login`) goes in Settings → Connection.
 
 ## Offline use
 

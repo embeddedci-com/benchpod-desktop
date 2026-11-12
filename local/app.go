@@ -431,6 +431,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/models", a.serveModels)
 	mux.HandleFunc("POST /api/test-model", a.serveTestModel)
 	mux.HandleFunc("POST /api/pod/connect", a.servePodConnect)
+	mux.HandleFunc("POST /api/pod/find", a.servePodFind)
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/console", a.serveConsole)
 	mux.HandleFunc("GET /api/capture/{kind}", a.serveCapture)
