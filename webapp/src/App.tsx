@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { CaptureView, ChatView, ConsoleTerminal, FlashControls, GeneratorControls, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type WaveformLibrary } from '@bpui'
+import { ActionIcon, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
+import { CaptureView, ChatView, ConsoleTerminal, FlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -56,6 +56,12 @@ export function App() {
   )
   // Firmware files the Flash tab uploads into the data folder, for the flash tool to read.
   const firmware = useMemo<FirmwareStore>(() => ({ upload: api.uploadFirmware, recent: async () => (await api.firmware()).files }), [])
+  // The pod's own firmware: the benchpod CLI's flash-self --network, run by benchpod-local.
+  const podUpdater = useMemo<PodUpdater>(
+    () => ({ info: api.podFirmware, addFile: api.addPodFirmwareFile, clearFiles: api.clearPodFirmwareFiles, update: api.updatePod }),
+    [],
+  )
+  const [podUpdate, setPodUpdate] = useState<string | null>(null)
   // The agent's captures show in the capture view: it reloads after each capture tool result.
   const agentCaptures = useMemo(
     () => chat.items.filter((it) => it.kind === 'tool' && !!it.result && CAPTURE_TOOLS.test(it.call.name)).length,
@@ -73,6 +79,16 @@ export function App() {
     const t = setInterval(() => void refresh(), chat.running ? 2000 : 5000)
     return () => clearInterval(t)
   }, [chat.running, refresh])
+
+  // Once the pod is connected, say in the header when a newer firmware release is out.
+  const podConnected = !!state?.pod.connected
+  useEffect(() => {
+    if (!podConnected) return
+    void api
+      .podFirmware()
+      .then((i) => setPodUpdate(newerVersion(i.latest, i.running) ? (i.latest ?? null) : null))
+      .catch(() => setPodUpdate(null))
+  }, [podConnected])
 
   if (!state) {
     return (
@@ -137,6 +153,11 @@ export function App() {
             benchpod
           </Title>
           {podBadge}
+          {podUpdate ? (
+            <Badge color="blue" variant="light" style={{ cursor: 'pointer' }} onClick={() => setSettingsOpen(true)}>
+              pod firmware {podUpdate} available
+            </Badge>
+          ) : null}
         </Group>
         <Group gap="xs">
           <Badge variant="default" style={{ cursor: 'pointer', textTransform: 'none' }} onClick={() => setSettingsOpen(true)}>
@@ -209,6 +230,11 @@ export function App() {
             setState(s)
           }}
         />
+        <Divider my="md" />
+        <Text fw={600} mb="xs">
+          Pod firmware
+        </Text>
+        <PodUpdate updater={podUpdater} connected={state.pod.connected} />
       </Drawer>
     </Stack>
   )

@@ -21,7 +21,8 @@
     "copyright": "Copyright EmbeddedCI contributors",
     "license": "Apache-2.0",
     "externalBin": [
-      "binaries/benchpod-local"
+      "binaries/benchpod-local",
+      "binaries/benchpod"
     ],
     "icon": [
       "icons/32x32.png",

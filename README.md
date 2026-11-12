@@ -67,6 +67,14 @@ The panel beside the chat drives the pod by hand, without the agent:
 - **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
   and the current the board draws, live, with the last minute as a chart.
 
+**Pod firmware** (in Settings): the pod's firmware and gateware version, a note in the header
+when a newer release is out, and an update: the latest release from GitHub, or, without internet
+(offline mode), the release files you downloaded elsewhere (`bench_pod_stm32.bin`, its `.sig`,
+`blobs-manifest.json` and the `blob-*.bin` files with their `.sig`). The pod checks the image and
+its signature, restarts into it, then gets the gateware and Wi-Fi bridge images. The app runs the
+bundled `benchpod` CLI for this (`benchpod flash-self --network`), over USB or your network; a
+pod on embeddedci.com updates from the web app.
+
 The controls use the same tools and the same safety settings as the agent: power, flashing and
 outputs ask first (unless you turned that off), the output limits apply, and every change goes to
 the action log. The agent reads the pod's state before it acts, so it sees what you changed.

@@ -82,6 +82,34 @@ export const api = {
     if (!r.ok) throw new Error((await r.text()).trim() || `HTTP ${r.status}`)
     return (await r.json()) as { name: string; path: string; size: number; modified: string }
   },
+  podFirmware: () => req<import('@bpui').PodFirmwareInfo>('GET', '/api/pod/firmware'),
+  addPodFirmwareFile: async (file: File) => {
+    const r = await fetch(`/api/pod/firmware/files?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: file,
+    })
+    if (!r.ok) throw new Error((await r.text()).trim() || `HTTP ${r.status}`)
+    return ((await r.json()) as { files: string[] }).files
+  },
+  clearPodFirmwareFiles: () => req<void>('DELETE', '/api/pod/firmware/files'),
+  /** Runs the update and streams its lines (text/event-stream). */
+  updatePod: async (opts: { version?: string; files?: boolean }, onLine: (l: string) => void) => {
+    const r = await fetch('/api/pod/firmware/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmed: true, ...opts }),
+    })
+    if (!r.ok || !r.body) return { ok: false, error: (await r.text()).trim() || `HTTP ${r.status}` }
+    const { readEvents } = await import('@bpui')
+    let done: { ok: boolean; error?: string } = { ok: false, error: 'the update stopped without an answer' }
+    for await (const e of readEvents(r.body)) {
+      const ev = e as { type: string; text?: string; ok?: boolean; error?: string }
+      if (ev.type === 'line' && ev.text != null) onLine(ev.text)
+      else if (ev.type === 'done') done = { ok: !!ev.ok, error: ev.error || undefined }
+    }
+    return done
+  },
   waveforms: () => req<{ waveforms: WaveformMeta[] }>('GET', '/api/waveforms'),
   createWaveform: (w: { name: string; unit: 'V' | 'mA'; sample_rate_hz: number; samples: number[] }) => req<WaveformMeta>('POST', '/api/waveforms', w),
   waveformFromCapture: (name: string) => req<WaveformMeta>('POST', '/api/waveforms/from-capture', { name }),

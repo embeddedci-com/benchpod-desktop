@@ -370,6 +370,18 @@ func (s *SSE) Send(e Event) {
 	s.f.Flush()
 }
 
+// SendData writes one event of a host's own shape (a progress line, say).
+func (s *SSE) SendData(v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fmt.Fprintf(s.w, "data: %s\n\n", b)
+	s.f.Flush()
+}
+
 // WriteJSON writes v as a JSON response.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

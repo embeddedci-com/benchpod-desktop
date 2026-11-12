@@ -23,6 +23,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # The benchpod CLI release bundled with the app (it updates the pod's own firmware).
+  BENCHPOD_CLI_REF: v0.8.6
+
 jobs:
   prepare:
     runs-on: ubuntu-24.04
@@ -89,6 +93,12 @@ jobs:
         with:
           repository: embeddedci-com/benchpod-ui
           path: benchpod-ui
+      # The benchpod CLI, bundled for updating the pod's own firmware (flash-self --network).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: embeddedci-com/benchpod-cli
+          ref: ${{ env.BENCHPOD_CLI_REF }}
+          path: benchpod-cli
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: benchpod-desktop/go.mod
@@ -120,6 +130,13 @@ jobs:
           mkdir -p desktop/src-tauri/binaries
           go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
             -o desktop/src-tauri/binaries/benchpod-local-${{ matrix.target }}${{ matrix.ext }} ./cmd/benchpod-local
+      - name: Build the benchpod CLI sidecar
+        working-directory: benchpod-cli
+        env:
+          CGO_ENABLED: ${{ matrix.goos == 'darwin' && '1' || '0' }}
+        run: |
+          go build -trimpath -ldflags "-s -w -X main.version=${BENCHPOD_CLI_REF#v}" \
+            -o ../benchpod-desktop/desktop/src-tauri/binaries/benchpod-${{ matrix.target }}${{ matrix.ext }} ./cmd/benchpod-cli
       - name: Build the desktop app
         working-directory: benchpod-desktop/desktop
         env:
