@@ -85,3 +85,27 @@ func (a *App) serveTool(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	chat.WriteJSON(w, http.StatusOK, a.callManual(ctx, r.PathValue("name"), req))
 }
+
+// serveCapture returns the last capture in full, for the capture view: the BenchPod MCP server's
+// benchpod://capture/{la,adc,decode} resource, as JSON. The agent's captures are there too.
+func (a *App) serveCapture(w http.ResponseWriter, r *http.Request) {
+	kind := r.PathValue("kind")
+	if kind != "la" && kind != "adc" && kind != "decode" {
+		http.Error(w, "kind is la, adc or decode", http.StatusNotFound)
+		return
+	}
+	t, err := a.mcp(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	text, err := t.ReadResource(r.Context(), "benchpod://capture/"+kind)
+	if err != nil {
+		// An MCP server older than these resources: nothing to draw, say so.
+		http.Error(w, "the BenchPod tools cannot show captures: update embeddedci-mcp ("+err.Error()+")", http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(text))
+}
