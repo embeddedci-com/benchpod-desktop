@@ -105,14 +105,22 @@ func routedBy(name string, args map[string]any) (string, bool) {
 		switch str("path") {
 		case "dac_3v3":
 			return "3v3", true
-		case "dac_5v":
+		case "dac_5v", "cal1": // cal1/cal2 loop the 5 V/12 V output back into the ADC
 			return "5v", true
-		case "dac_12v":
+		case "dac_12v", "cal2":
 			return "12v", true
 		case "current_out":
 			return "current_out", true
 		}
 		return "", true
+	case "adc_read", "capture_adc", "capture_correlated":
+		// Reading the cal1/cal2 loopback routes the 5 V/12 V output; other sources leave the DAC.
+		switch str("source") {
+		case "cal1":
+			return "5v", true
+		case "cal2":
+			return "12v", true
+		}
 	case "calibrate_dac", "calibrate", "calibrate_adc_gain", "command", "adc_range":
 		return "", true
 	}
@@ -190,11 +198,11 @@ func (l Limits) checkLoop(o *Output, args map[string]any) error {
 // checkReroute refuses moving a running loop onto an output where its clamp is above the limits.
 func (l Limits) checkReroute(o *Output, name string, args map[string]any) error {
 	lo, hi, armed := o.armedLoop()
-	if !armed || name != "analog_path" {
+	if !armed {
 		return nil
 	}
-	path, _ := routedBy(name, args)
-	if path == "" {
+	path, routes := routedBy(name, args)
+	if !routes || path == "" {
 		return nil
 	}
 	return l.checkCodes("the running control loop's clamp", lo, hi, path)

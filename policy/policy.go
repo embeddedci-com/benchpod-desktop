@@ -49,8 +49,9 @@ var ReadOnly = []string{
 func (l Limits) Check() func(name string, args map[string]any) error { return l.CheckOutput(nil) }
 
 // CheckOutput is Check, and with o (the routed output, see Output) it also holds control_loop's
-// clamp to the limits, refuses it while the routed output is unknown, and refuses analog_path
-// moving a running loop onto an output where its clamp is above them.
+// clamp to the limits, refuses it while the routed output is unknown, and refuses analog_path (or
+// an ADC read of the cal1/cal2 loopback) moving a running loop onto an output where its clamp is
+// above them.
 //
 // loop_input needs no check and no confirmation: it only moves the input of a loop that is
 // armed, whose output stays inside the clamp control_loop was checked with.
@@ -59,7 +60,7 @@ func (l Limits) CheckOutput(o *Output) func(name string, args map[string]any) er
 		switch name {
 		case "control_loop":
 			return l.checkLoop(o, args)
-		case "analog_path":
+		case "analog_path", "adc_read", "capture_adc", "capture_correlated":
 			return l.checkReroute(o, name, args)
 		case "dac_output":
 			if v, ok := num(args["volts"]); ok && l.MaxDACVolts > 0 && math.Abs(v) > l.MaxDACVolts {

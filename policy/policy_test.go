@@ -190,6 +190,18 @@ func TestControlLoopClamp(t *testing.T) {
 	if err := check("analog_path", map[string]any{"path": "dac_12v"}); err == nil {
 		t.Error("moving a full-range loop onto 12v must be refused")
 	}
+	if err := check("analog_path", map[string]any{"path": "cal2"}); err == nil {
+		t.Error("cal2 is the 12v output: must be refused")
+	}
+	if err := check("adc_read", map[string]any{"source": "cal2"}); err == nil {
+		t.Error("reading the cal2 loopback routes the 12v output: must be refused")
+	}
+	if err := check("adc_read", map[string]any{"source": "ext"}); err != nil {
+		t.Errorf("an ext read leaves the DAC: %v", err)
+	}
+	if err := check("analog_path", map[string]any{"path": "cal1"}); err != nil {
+		t.Errorf("cal1 is the 5v output: %v", err)
+	}
 	if err := check("analog_path", map[string]any{"path": "dac_5v"}); err != nil {
 		t.Errorf("onto 5v is within 5 V: %v", err)
 	}
