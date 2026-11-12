@@ -38,7 +38,7 @@ func TestLimits(t *testing.T) {
 }
 
 func TestPoliciesHideConnectionTools(t *testing.T) {
-	d := Desktop(Limits{}, true)
+	d := Desktop(Limits{}, true, nil)
 	for _, n := range []string{"connect", "disconnect"} {
 		if contains(d.Deny, n) == false {
 			t.Errorf("desktop offers %s", n)
@@ -92,7 +92,7 @@ func contains(l []string, s string) bool {
 }
 
 func TestOfflineRefusesCloud(t *testing.T) {
-	p := Offline(Desktop(Limits{}, true))
+	p := Offline(Desktop(Limits{}, true, nil))
 	for _, name := range OfflineDeny {
 		found := false
 		for _, d := range p.Deny {
@@ -113,5 +113,102 @@ func TestOfflineRefusesCloud(t *testing.T) {
 	}
 	if err := p.Check("dac_output", map[string]any{"volts": 1.0}); err != nil {
 		t.Errorf("dac_output refused offline: %v", err)
+	}
+}
+
+func TestFaultLevel(t *testing.T) {
+	check := Limits{MaxDACVolts: 5, MaxCurrentOut: 0.02}.Check()
+	cases := []struct {
+		args map[string]any
+		ok   bool
+	}{
+		// 3v3 tops out below 5 V: any level is fine.
+		{map[string]any{"volts": []any{1.0}, "fault": map[string]any{"type": "spike"}}, true},
+		// code 65535 on 12v is +12 V; code 0 is -12 V; mid-scale is 0 V.
+		{map[string]any{"volts": []any{1.0}, "dac_path": "12v", "fault": map[string]any{"type": "spike"}}, false},
+		{map[string]any{"volts": []any{1.0}, "dac_path": "12v", "fault": map[string]any{"type": "flatline"}}, false},
+		{map[string]any{"volts": []any{1.0}, "dac_path": "12v", "fault": map[string]any{"type": "flatline", "level": 32768.0}}, true},
+		{map[string]any{"volts": []any{1.0}, "dac_path": "12v", "fault": map[string]any{"type": "stuck", "level": 50000.0}}, false},
+		// current_out tops out at 20.1 mA, above a 20 mA limit.
+		{map[string]any{"volts": []any{0.01}, "dac_path": "current_out", "fault": map[string]any{"type": "spike"}}, false},
+		{map[string]any{"volts": []any{0.01}, "dac_path": "current_out", "fault": map[string]any{"type": "spike", "level": 30000.0}}, true},
+		{map[string]any{"waveform_id": "x", "dac_path": "12v", "fault": map[string]any{"type": "spike", "level": 40000.0}}, true},
+	}
+	for _, c := range cases {
+		if err := check("replay", c.args); (err == nil) != c.ok {
+			t.Errorf("%v: err=%v, want ok=%v", c.args, err, c.ok)
+		}
+	}
+}
+
+func TestControlLoopClamp(t *testing.T) {
+	var out Output
+	l := Limits{MaxDACVolts: 5}
+	check := l.CheckOutput(&out)
+	loop := func(vmin, vmax float64) map[string]any { return map[string]any{"vmin": vmin, "vmax": vmax} }
+
+	// Nothing routed yet: which output the codes drive is not known.
+	if err := check("control_loop", loop(0, 65535)); err == nil {
+		t.Error("loop with an unknown output must be refused under a DAC limit")
+	}
+	if err := (Limits{}).CheckOutput(&out)("control_loop", loop(0, 65535)); err != nil {
+		t.Errorf("no limits, no refusal: %v", err)
+	}
+	out.Observe("dac_output", map[string]any{"path": "3v3", "volts": 0.0}, true)
+	if err := check("control_loop", loop(0, 65535)); err != nil {
+		t.Errorf("3v3 full range is under 5 V: %v", err)
+	}
+	out.Observe("dac_output", map[string]any{"path": "12v", "volts": 0.0}, true)
+	if err := check("control_loop", loop(0, 65535)); err == nil {
+		t.Error("12v full range (±12 V) must be refused under 5 V")
+	}
+	// 0..5 V on 12v: codes 32768..46421.
+	if err := check("control_loop", loop(32768, 46421)); err != nil {
+		t.Errorf("0..5 V on 12v: %v", err)
+	}
+	if err := check("control_loop", loop(32768, 50000)); err == nil {
+		t.Error("vmax above 5 V on 12v must be refused")
+	}
+	// A failed routing leaves it unknown.
+	out.Observe("dac_output", map[string]any{"path": "3v3"}, false)
+	if out.Path() != "" {
+		t.Errorf("failed routing: path %q, want unknown", out.Path())
+	}
+	// generate and replay route their dac_path unless route is false.
+	out.Observe("generate", map[string]any{"dac_path": "5v"}, true)
+	if out.Path() != "5v" {
+		t.Errorf("generate: %q", out.Path())
+	}
+	out.Observe("replay", map[string]any{"dac_path": "12v", "route": false}, true)
+	if out.Path() != "5v" {
+		t.Errorf("replay route=false must keep the routing: %q", out.Path())
+	}
+
+	// A running loop may not be moved onto an output where its clamp is above the limit.
+	out.Observe("dac_output", map[string]any{"path": "3v3", "volts": 0.0}, true)
+	out.Observe("control_loop", loop(0, 65535), true)
+	if err := check("analog_path", map[string]any{"path": "dac_12v"}); err == nil {
+		t.Error("moving a full-range loop onto 12v must be refused")
+	}
+	if err := check("analog_path", map[string]any{"path": "dac_5v"}); err != nil {
+		t.Errorf("onto 5v is within 5 V: %v", err)
+	}
+	out.Observe("dac_stop", map[string]any{}, true)
+	if err := check("analog_path", map[string]any{"path": "dac_12v"}); err != nil {
+		t.Errorf("no loop running: %v", err)
+	}
+	out.Reset()
+	if out.Path() != "" {
+		t.Error("Reset must forget the routing")
+	}
+}
+
+func TestLoopInputNeedsNoConfirm(t *testing.T) {
+	d := Desktop(Limits{}, true, nil)
+	if d.NeedsConfirm("loop_input") {
+		t.Error("loop_input only moves an armed loop's input: no confirmation")
+	}
+	if !d.NeedsConfirm("control_loop") || !d.NeedsConfirm("analog_path") {
+		t.Error("control_loop and analog_path change the output: confirm them")
 	}
 }

@@ -28,7 +28,7 @@ var Risky = []string{
 	"power_on", "power_off", "power_cycle_and_capture", "reset_target",
 	"flash", "spi_flash_program",
 	"dac_output", "current_out", "generate", "replay", "replay_waveform", "control_loop",
-	"loop_input", "set_pull", "set_la_voltage", "gpio_write", "gpio_pulse", "gpio_mode",
+	"analog_path", "set_pull", "set_la_voltage", "gpio_write", "gpio_pulse", "gpio_mode",
 	"set_wiring", "fpga_image", "calibrate", "calibrate_dac", "calibrate_adc_gain",
 	"lan_tls", "usb_network", "command",
 	"can_write", "can_respond", "spi_transfer",
@@ -37,17 +37,30 @@ var Risky = []string{
 // ReadOnly are tools that only observe. They never need a confirmation.
 var ReadOnly = []string{
 	"status", "wiring", "power_status", "pull_status", "la_pins", "la_timing", "calibration",
-	"analog_path", "list_waveforms", "adc_read", "gpio_read", "gpio_wait",
+	"list_waveforms", "adc_read", "gpio_read", "gpio_wait",
 	"capture_la", "capture_adc", "capture_uart", "capture_correlated", "decode_la",
 	"uart_read", "can_read", "can_status", "measure_power",
 	"i2c_sensor_status", "i2c_sensor_types", "i2c_sensor_regs", "i2c_sensor_capture",
 	"gps_status", "spi_flash_info", "spi_flash_read", "loop_probe", "cloud_list_devices",
 }
 
-// Check returns an agent.Policy Check func enforcing the limits.
-func (l Limits) Check() func(name string, args map[string]any) error {
+// Check returns an agent.Policy Check func enforcing the limits. It has no view of the routed
+// output, so it leaves the control loop's clamp alone: CheckOutput holds that one too.
+func (l Limits) Check() func(name string, args map[string]any) error { return l.CheckOutput(nil) }
+
+// CheckOutput is Check, and with o (the routed output, see Output) it also holds control_loop's
+// clamp to the limits, refuses it while the routed output is unknown, and refuses analog_path
+// moving a running loop onto an output where its clamp is above them.
+//
+// loop_input needs no check and no confirmation: it only moves the input of a loop that is
+// armed, whose output stays inside the clamp control_loop was checked with.
+func (l Limits) CheckOutput(o *Output) func(name string, args map[string]any) error {
 	return func(name string, args map[string]any) error {
 		switch name {
+		case "control_loop":
+			return l.checkLoop(o, args)
+		case "analog_path":
+			return l.checkReroute(o, name, args)
 		case "dac_output":
 			if v, ok := num(args["volts"]); ok && l.MaxDACVolts > 0 && math.Abs(v) > l.MaxDACVolts {
 				return fmt.Errorf("%.3g V is above this bench's DAC limit of %.3g V", v, l.MaxDACVolts)
@@ -94,6 +107,9 @@ func (l Limits) checkReplay(args map[string]any) error {
 	if limit <= 0 {
 		return nil
 	}
+	if err := l.checkFault(args, path); err != nil {
+		return err
+	}
 	if m, _ := args["mapping"].(string); m == "fit" {
 		if p := pathPeak[path]; p > limit {
 			return fmt.Errorf("a replay scaled to fit %s reaches %.3g %s, above this bench's limit of %.3g %s: play it as recorded (mapping faithful) or on a lower output", path, p, unit, limit, unit)
@@ -113,6 +129,23 @@ func (l Limits) checkReplay(args map[string]any) error {
 	return nil
 }
 
+// checkFault holds a replay's fault level (a raw 16-bit DAC code) to the limits: the value it holds
+// on the output. Without a level a flatline holds code 0 and a spike or stuck full scale.
+func (l Limits) checkFault(args map[string]any, path string) error {
+	f, ok := args["fault"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	level, set := num(f["level"])
+	if !set {
+		level = 65535
+		if t, _ := f["type"].(string); t == "flatline" {
+			level = 0
+		}
+	}
+	return l.checkCodes("the fault level", int(level), int(level), path)
+}
+
 func num(v any) (float64, bool) {
 	switch x := v.(type) {
 	case float64:
@@ -124,11 +157,12 @@ func num(v any) (float64, bool) {
 }
 
 // Desktop is the community app's policy: every tool, the risky ones confirmed (unless
-// confirm is false), connect and disconnect left to the app (it owns the connection).
-func Desktop(l Limits, confirm bool) agent.Policy {
+// confirm is false), connect and disconnect left to the app (it owns the connection). out is the
+// routed output the app observes calls into (nil: the control loop's clamp is not checked).
+func Desktop(l Limits, confirm bool, out *Output) agent.Policy {
 	p := agent.Policy{
 		Deny:         []string{"connect", "disconnect"},
-		Check:        l.Check(),
+		Check:        l.CheckOutput(out),
 		MaxToolCalls: 40,
 		MaxTurns:     50,
 	}
