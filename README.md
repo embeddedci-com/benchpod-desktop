@@ -39,6 +39,10 @@ USB.
 
 The panel beside the chat drives the pod by hand, without the agent:
 
+- **Console**: the board's UART console. Open it (the channels and baud come from the wiring, or
+  pick them), type a command and press Enter (LF, CRLF or no line ending; up and down arrows go
+  through what you typed). The agent's console reads and writes show here too, in order; while the
+  agent runs, the terminal leaves the reading to it.
 - **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
   and the current the board draws, live, with the last minute as a chart.
 
