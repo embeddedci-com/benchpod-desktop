@@ -103,6 +103,32 @@ The controls use the same tools and the same safety settings as the agent: power
 outputs ask first (unless you turned that off), the output limits apply, and every change goes to
 the action log. The agent reads the pod's state before it acts, so it sees what you changed.
 
+## Sensors
+
+The **Sensors** view (the switch at the top) makes the pod act as a sensor your firmware reads:
+an I2C, SPI, UART or analog part, described in a YAML file
+([format](https://github.com/embeddedci-com/benchpod-sensors/blob/main/docs/format.md)).
+
+- **Library**: ready-made sensors (BME280, BMP280, MPU-6050, SHT4x, a GPS receiver). Open one to
+  preview it or run it as is; duplicate it to change it.
+- **My sensors** and **Stimuli**: your own definitions and stimuli (values that change over
+  time, with faults), with an editor that checks the file as you type and previews what the DUT
+  reads. They are files on this computer, in the data folder's `sensors` folder
+  (`sensors/<kind>/<name>.yaml`, `stimuli/<name>.yaml`), kept as you wrote them. Upload a file,
+  or download one or all of them (a zip): downloads go to your Downloads folder.
+- **On the pod**: start a sensor on the LA channels from the wiring (an I2C start switches on
+  the pull-ups, after asking), change its values while the firmware runs, inject faults, read
+  back its registers, play a stimulus.
+
+Running sensors needs pod firmware that plays them; with older firmware the view says so and
+the update is in Settings. The library and the editor work without a pod and offline.
+
+**Sensor library** (in Settings): the library version built into the app, the latest release,
+or a specific version. Other versions download from GitHub once and are cached in the folder the
+BenchPod Python SDK and CLI share (`embeddedci/benchpod-sensors` in your user cache folder, or
+`BENCHPOD_SENSOR_CACHE`). Offline, or when GitHub cannot be reached, a cached version is used,
+else the built-in one, with a note.
+
 ## Safety
 
 An agent driving real hardware gets limits it cannot talk its way past. They are enforced in the
@@ -226,6 +252,10 @@ runs `benchpod-local` and the webapp with hot reload on http://localhost:5176.
 make test
 ```
 
+`BPUI_SRC=/path/to/benchpod-ui/src` builds and tests the webapp against another benchpod-ui
+checkout (a worktree) instead of `../benchpod-ui`. Refresh the built-in sensor library from a
+benchpod-sensors checkout with `go run ./sensors/gen -src ../benchpod-sensors -version X.Y.Z`.
+
 ## Release
 
 ```bash
@@ -244,6 +274,7 @@ draft updates the Homebrew cask (the repository needs the `TAP_GITHUB_TOKEN` sec
 | `policy/` | which tools need a confirmation, the hardware limits |
 | `providers/` | model endpoint presets and recommended models |
 | `local/` | the app's backend: settings, keys, the MCP server, the HTTP API |
+| `sensors/` | sensor definitions (parse, convert) and the public sensor library, with its built-in copy |
 | `cmd/benchpod-local/` | the binary |
 | `webapp/` | the page |
 | `desktop/` | the Tauri shell |
