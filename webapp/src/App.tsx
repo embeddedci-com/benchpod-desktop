@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Badge, Box, Button, Card, Drawer, Group, Loader, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { CaptureView, ChatView, ConsoleTerminal, PowerControls, useBenchCall, useChat, useTools, type FetchCapture } from '@bpui'
+import { CaptureView, ChatView, ConsoleTerminal, GeneratorControls, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -34,6 +34,18 @@ export function App() {
   const tools = useTools('/api/chat')
   // The bench controls beside the chat: the same tools as the agent, through the same policy.
   const bench = useBenchCall('/api/tool')
+  // The waveform library in the data folder; a waveform plays through the replay tool (and the policy).
+  const library = useMemo<WaveformLibrary>(
+    () => ({
+      list: async () => (await api.waveforms()).waveforms,
+      create: api.createWaveform,
+      fromCapture: api.waveformFromCapture,
+      rename: api.renameWaveform,
+      remove: api.deleteWaveform,
+      play: (id, opts) => bench.call('replay', { local_waveform: id, ...opts }),
+    }),
+    [bench.call],
+  )
   // The agent's captures show in the capture view: it reloads after each capture tool result.
   const agentCaptures = useMemo(
     () => chat.items.filter((it) => it.kind === 'tool' && !!it.result && CAPTURE_TOOLS.test(it.call.name)).length,
@@ -164,6 +176,7 @@ export function App() {
               </Stack>
             }
             footer={footer}
+            panelTabs={[{ value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> }]}
             panelControls={{
               captures: <CaptureView call={bench.call} fetchCapture={fetchCapture} refreshKey={agentCaptures} />,
               console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,

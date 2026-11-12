@@ -70,9 +70,47 @@ func (l Limits) Check() func(name string, args map[string]any) error {
 			if v, ok := num(args["current"]); ok && l.MaxCurrentOut > 0 && math.Abs(v) > l.MaxCurrentOut {
 				return fmt.Errorf("%.3g A is above this bench's current-loop limit of %.3g A", v, l.MaxCurrentOut)
 			}
+		case "replay", "replay_waveform":
+			return l.checkReplay(args)
 		}
 		return nil
 	}
+}
+
+// pathPeak is the most an output path can drive: what a replay scaled to fit it reaches.
+var pathPeak = map[string]float64{"3v3": 3.3, "5v": 5, "12v": 12, "current_out": 0.0201}
+
+// checkReplay holds a replay to the limits: its peak sample when it plays the values as given, or
+// the output's full range when it is scaled to fit it.
+func (l Limits) checkReplay(args map[string]any) error {
+	path, _ := args["dac_path"].(string)
+	if path == "" {
+		path = "3v3"
+	}
+	limit, unit := l.MaxDACVolts, "V"
+	if path == "current_out" {
+		limit, unit = l.MaxCurrentOut, "A"
+	}
+	if limit <= 0 {
+		return nil
+	}
+	if m, _ := args["mapping"].(string); m == "fit" {
+		if p := pathPeak[path]; p > limit {
+			return fmt.Errorf("a replay scaled to fit %s reaches %.3g %s, above this bench's limit of %.3g %s: play it as recorded (mapping faithful) or on a lower output", path, p, unit, limit, unit)
+		}
+		return nil
+	}
+	values, _ := args["volts"].([]any)
+	peak := 0.0
+	for _, v := range values {
+		if f, ok := num(v); ok && math.Abs(f) > peak {
+			peak = math.Abs(f)
+		}
+	}
+	if peak > limit {
+		return fmt.Errorf("the waveform peaks at %.3g %s, above this bench's limit of %.3g %s", peak, unit, limit, unit)
+	}
+	return nil
 }
 
 func num(v any) (float64, bool) {
