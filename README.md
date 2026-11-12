@@ -49,7 +49,16 @@ The panel beside the chat drives the pod by hand, without the agent:
   (the channels and baud come from the wiring) as a table and as labels on the waveform. The
   agent's captures and decodes show here too. Needs embeddedci-mcp 2.13.10 or later.
 - **Generator**: pick the output (3.3 V, 5 V, ±12 V or the 4-20 mA output), then drive a DC level,
-  play a sine, square or sawtooth, or play a waveform from your library, until **Stop**.
+  play a sine, square or sawtooth, or play a waveform from your library, until **Stop**. Also:
+  - **Segments**: build a signal from ramps, holds and steps (durations in ms, levels in volts or
+    mA), play it in a loop, or save it to the library.
+  - **Fault**: replay a library waveform with a window (start and width in % of it) replaced by a
+    flatline or spike at a level you pick, or stuck at the value just before the window.
+  - **Control loop**: the FPGA loop. Each tick it reads an input, looks it up in a curve (a droop
+    with a knee, like a solar panel's I-V, constant, rising or falling), moves the output toward it
+    and holds it inside a clamp. The input is the ADC (closed loop), a held point you move with a
+    slider, or a sweep. The live output and input show while it runs. Presets, the input sense chain
+    and an output stage between the DAC and the board are in the web app only for now.
 - **Waveform library**: kept on this computer, in the data folder's `waveforms` folder. Save the
   last analog capture (yours or the agent's) under a name, or import a CSV (one value per line, or
   time and value columns, which give the rate). Play one as recorded or scaled to fill the
@@ -87,7 +96,11 @@ app, before a tool runs, never only in the prompt:
 - **Confirmations**: power, flashing, outputs and pod settings wait for your yes (on by default).
 - **Limits**: a ceiling for the DAC output voltage and the 4-20 mA loop current, for DC levels,
   generated waveforms and replays alike (a replay scaled to fill an output counts as that output's
-  full range).
+  full range), a fault's level, and the control loop's clamp. The loop drives the output last
+  routed, so the app follows which one that is: a loop is refused until an output is routed
+  (`dac_output` with the path and 0 V, which the Generator does for you), and moving a running loop
+  onto an output where its clamp is above the limit is refused too. Moving a running loop's input
+  (`loop_input`) asks nothing: its output stays inside the clamp it was checked with.
 - **Caps**: tool calls and model turns per message.
 - **Action log**: every tool call, its arguments and its result, in `actions.jsonl` in the data
   folder, with who made it: the agent, or you from the bench controls (`"source": "manual"`).
