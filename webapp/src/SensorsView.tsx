@@ -62,6 +62,7 @@ export function SensorsView({ state, call, onUpdateFirmware }: { state: AppState
           onUpdateFirmware={onUpdateFirmware}
           bench={bench}
           files={files}
+          libraryScope="computer"
         />
       </Stack>
     </Box>
