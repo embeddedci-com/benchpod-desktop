@@ -249,7 +249,7 @@ func TestSensorLibraryRoutes(t *testing.T) {
 	}
 	var l listing
 	c.do("GET", "/api/sensor-library", nil, &l)
-	if l.Version != "0.1.0" || l.Origin != "embedded" || len(l.Entries) != 5 || hits != 0 {
+	if l.Version != "0.1.0" || l.Origin != "embedded" || len(l.Entries) != 13 || hits != 0 {
 		t.Fatalf("embedded: %+v, %d hits", l, hits)
 	}
 	var e struct {
