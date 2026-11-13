@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { desktopSequenceStore } from './sequences'
 import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { BusDashboard, ChatView, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
+import { BusDashboard, ChatView, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary, type SequenceStore } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -35,6 +36,12 @@ function needsSetup(s: AppState): boolean {
 
 export function App() {
   const [state, setState] = useState<AppState | null>(null)
+  const [sequences, setSequences] = useState<SequenceStore | null>(null)
+  // The saved sequences: local, plus the embeddedci.com account's when signed in (checked again
+  // when the settings change, e.g. offline mode).
+  useEffect(() => {
+    void desktopSequenceStore().then(setSequences)
+  }, [state?.offline])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [findOpen, setFindOpen] = useState(false)
@@ -265,6 +272,7 @@ export function App() {
                   fetchCapture={fetchCapture}
                   refreshKey={agentCaptures}
                   renderConsole={(call) => <ConsoleTerminal call={call} logBase="/api/console" agentRunning={chat.running} />}
+                  sequences={sequences ?? undefined}
                 />
               ),
               console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,

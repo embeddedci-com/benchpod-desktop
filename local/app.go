@@ -78,7 +78,11 @@ type App struct {
 	actions   *os.File
 	console   consoleLog
 	waveforms waveformStore
-	updater   podUpdater
+	// sequences: the bus console's saved sequences (sequences.go); accountClient, when set, is the
+	// HTTP client for embeddedci.com (tests).
+	sequences     sequenceStore
+	accountClient *http.Client
+	updater       podUpdater
 	// output follows the routed DAC output for the policy's control-loop check.
 	output policy.Output
 
@@ -469,6 +473,7 @@ func (a *App) Handler() http.Handler {
 		chat.WriteJSON(w, http.StatusOK, map[string]any{"lines": a.mcpLog.Lines()})
 	})
 	a.mountSensors(mux)
+	a.mountSequences(mux)
 	a.session.Mount(mux, "/api/chat")
 	return mux
 }

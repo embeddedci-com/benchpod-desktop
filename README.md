@@ -48,6 +48,12 @@ The panel beside the chat drives the pod by hand, without the agent:
   drag to zoom, double-click to reset, pick which channels to show. Decode UART, I2C or SPI from it
   (the channels and baud come from the wiring) as a table and as labels on the waveform. The
   agent's captures and decodes show here too. Needs embeddedci-mcp 2.13.10 or later.
+  **Sequences**: tick rows in the bus console's log and save them under a name, then run the
+  sequence again (each step asks the same confirmations as by hand, and a read that differs from
+  the recording is flagged) or export it as a pytest file for the embeddedci SDK, with an assert
+  per read. Sequences are kept on this computer, in `bus-sequences.json` in the data folder. With
+  an EmbeddedCI API key (signed in to embeddedci.com, not offline) you can also share one in your
+  organization; shared ones are kept in your embeddedci.com account.
 - **Generator**: pick the output (3.3 V, 5 V, ±12 V or the 4-20 mA output), then drive a DC level,
   play a sine, square or sawtooth, or play a waveform from your library, until **Stop**. Also:
   - **Segments**: build a signal from ramps, holds and steps (durations in ms, levels in volts or
