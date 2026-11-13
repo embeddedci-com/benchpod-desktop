@@ -33,6 +33,8 @@ var Risky = []string{
 	"set_wiring", "fpga_image", "calibrate", "calibrate_dac", "calibrate_adc_gain",
 	"lan_tls", "usb_network", "command",
 	"can_write", "can_respond", "spi_transfer",
+	// Emulated sensors drive LA pins (I2C, SPI, UART, data-ready) and can load the emulation image.
+	"sensor_start", "sensor_fault", "sensor_stimulus_start",
 }
 
 // ReadOnly are tools that only observe. They never need a confirmation.
