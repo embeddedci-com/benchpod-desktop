@@ -68,6 +68,9 @@ The panel beside the chat drives the pod by hand, without the agent:
   power-cycle the board and see its boot log, and keep a target that worked in the wiring. The
   file is copied into the data folder's `firmware` folder (the last 10 stay, to flash again).
   OpenOCD runs on your computer: install it first (`brew install open-ocd` on a Mac).
+  Below it, **SPI flash chip**: identify, program (erase, write, verify) and read back a 25-series
+  SPI NOR flash on the wiring's SPI pins, optionally holding the board in reset. A read of up to
+  4 KB shows as hex; a longer one is saved as a file in the data folder.
 - **Wiring**: which board signal is on which LA channel (UART, I2C, SWD and SPI roles, and named
   signals), the target power rail, the I/O voltage, the UART baud and the OpenOCD target for
   flashing, with each channel's pull resistor and any conflict. Every control and the agent read
