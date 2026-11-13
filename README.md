@@ -73,8 +73,10 @@ The panel beside the chat drives the pod by hand, without the agent:
   4 KB shows as hex; a longer one is saved as a file in the data folder.
 - **Wiring**: which board signal is on which LA channel (UART, I2C, SWD and SPI roles, and named
   signals), the target power rail, the I/O voltage, the UART baud and the OpenOCD target for
-  flashing, with each channel's pull resistor and any conflict. Every control and the agent read
-  it. It is kept on this computer, in `wiring.json` in the data folder; a profile the agent saves
+  flashing, with each channel's pull resistor and any conflict. Pin directions: which way each wired
+  board signal goes (board output, board input or bidirectional), with each role's and signal's
+  default shown. Saving sends them to the pod (firmware 3.10.4+), which then never drives a board
+  output with a push-pull driver. Every control and the agent read it. It is kept on this computer, in `wiring.json` in the data folder; a profile the agent saves
   with `set_wiring` lands there too.
 - **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
   and the current the board draws, live, with the last minute as a chart.
