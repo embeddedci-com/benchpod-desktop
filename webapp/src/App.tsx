@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { CaptureView, ChatView, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
+import { BusDashboard, ChatView, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -259,7 +259,14 @@ export function App() {
               { value: 'wiring', label: 'Wiring', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
             ]}
             panelControls={{
-              captures: <CaptureView call={bench.call} fetchCapture={fetchCapture} refreshKey={agentCaptures} />,
+              captures: (
+                <BusDashboard
+                  call={bench.call}
+                  fetchCapture={fetchCapture}
+                  refreshKey={agentCaptures}
+                  renderConsole={(call) => <ConsoleTerminal call={call} logBase="/api/console" agentRunning={chat.running} />}
+                />
+              ),
               console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,
               power: <PowerControls call={bench.call} />,
             }}
