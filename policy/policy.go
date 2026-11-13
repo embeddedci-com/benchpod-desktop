@@ -33,11 +33,24 @@ var Risky = []string{
 	"set_wiring", "fpga_image", "calibrate", "calibrate_dac", "calibrate_adc_gain",
 	"lan_tls", "usb_network", "command",
 	"can_write", "can_respond", "spi_transfer",
+	// The pod as I2C master drives SCL and SDA (a scan probes every address).
+	"i2c_open", "i2c_transfer", "i2c_scan",
 	// Emulated sensors drive LA pins (I2C, SPI, UART, data-ready) and can load the emulation image.
 	"sensor_start", "sensor_fault", "sensor_stimulus_start",
 }
 
-// ReadOnly are tools that only observe. They never need a confirmation.
+// DrivesBus says whether a call that is otherwise read-only also drives the DUT's pins:
+// capture_la with a send (an I2C, SPI or gpio transaction right after the arm). It is confirmed
+// like the risky tools.
+func DrivesBus(name string, args map[string]any) bool {
+	if name != "capture_la" || args == nil {
+		return false
+	}
+	send, ok := args["send"]
+	return ok && send != nil
+}
+
+// ReadOnly are tools that only observe (capture_la only without a send, see DrivesBus). They never need a confirmation.
 var ReadOnly = []string{
 	"status", "wiring", "power_status", "pull_status", "la_pins", "la_timing", "calibration",
 	"list_waveforms", "adc_read", "gpio_read", "gpio_wait",
@@ -172,6 +185,7 @@ func Desktop(l Limits, confirm bool, out *Output) agent.Policy {
 	}
 	if confirm {
 		p.Confirm = Risky
+		p.ConfirmIf = DrivesBus
 	}
 	return p
 }
@@ -192,6 +206,9 @@ func Demo() agent.Policy {
 			"gpio_read",
 		},
 		Check: func(name string, args map[string]any) error {
+			if DrivesBus(name, args) {
+				return errors.New("capture_la with a send is not available in the demo")
+			}
 			if err := checkDefinitionArgs(name, args); err != nil {
 				return err
 			}
@@ -217,6 +234,7 @@ func PodFiles(l Limits, allowed func(string) bool) agent.Policy {
 			"save_capture_as_recording", "lan_tls", "usb_network", "command",
 		},
 		Confirm:         Risky,
+		ConfirmIf:       DrivesBus,
 		Check:           podCheck(l, allowed),
 		MaxToolCalls:    30,
 		MaxTurns:        36,

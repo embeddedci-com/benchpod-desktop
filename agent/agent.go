@@ -18,6 +18,9 @@ type Policy struct {
 	// Confirm names the tools that need the user's yes before each call (power, flash, raising
 	// a voltage). A tool not in the list runs without asking.
 	Confirm []string
+	// ConfirmIf, when set, also asks before a call it returns true for: a tool that only needs
+	// the user's yes with some arguments (a capture that also drives the bus, say).
+	ConfirmIf func(name string, args map[string]any) bool
 	// Check runs before every call, after Confirm: return an error to refuse the call (a
 	// voltage above the rail's ceiling, say). The error text goes back to the model.
 	Check func(name string, args map[string]any) error
@@ -36,8 +39,10 @@ type Policy struct {
 // Allows says whether the policy lets name run at all (Allow, then Deny).
 func (p Policy) Allows(name string) bool { return p.allowed(name) }
 
-// NeedsConfirm says whether a call to name waits for the user's yes.
-func (p Policy) NeedsConfirm(name string) bool { return contains(p.Confirm, name) }
+// NeedsConfirm says whether a call to name with args waits for the user's yes.
+func (p Policy) NeedsConfirm(name string, args map[string]any) bool {
+	return contains(p.Confirm, name) || (p.ConfirmIf != nil && p.ConfirmIf(name, args))
+}
 
 func (p Policy) allowed(name string) bool {
 	if len(p.Allow) > 0 && !contains(p.Allow, name) {
@@ -197,7 +202,7 @@ func (a *Agent) call(ctx context.Context, c ToolCall) (res ToolResult, refused b
 			return ToolResult{Text: "the arguments are not a JSON object: " + err.Error(), IsError: true}, true, 0
 		}
 	}
-	if contains(a.Policy.Confirm, c.Name) {
+	if a.Policy.NeedsConfirm(c.Name, args) {
 		ok := false
 		if a.Confirm != nil {
 			var err error

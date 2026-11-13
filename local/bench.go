@@ -52,7 +52,7 @@ func (a *App) callManual(ctx context.Context, name string, req toolRequest) tool
 	if !pol.Allows(name) {
 		return toolResponse{Text: "tool " + name + " is not available here", IsError: true, Refused: true}
 	}
-	if pol.NeedsConfirm(name) && !req.Confirmed {
+	if pol.NeedsConfirm(name, req.Args) && !req.Confirmed {
 		return toolResponse{Confirm: true}
 	}
 	if pol.Check != nil {
