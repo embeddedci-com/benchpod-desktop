@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/embeddedci-com/benchpod-desktop/agent"
@@ -32,6 +33,8 @@ var Risky = []string{
 	"set_wiring", "fpga_image", "calibrate", "calibrate_dac", "calibrate_adc_gain",
 	"lan_tls", "usb_network", "command",
 	"can_write", "can_respond", "spi_transfer",
+	// Emulated sensors drive LA pins (I2C, SPI, UART, data-ready) and can load the emulation image.
+	"sensor_start", "sensor_fault", "sensor_stimulus_start",
 }
 
 // ReadOnly are tools that only observe. They never need a confirmation.
@@ -176,17 +179,24 @@ func Desktop(l Limits, confirm bool, out *Output) agent.Policy {
 // Demo is the public website demo against a simulated pod. Only the tools the simulator
 // answers, nothing that reads a file or picks a connection, tight caps.
 func Demo() agent.Policy {
+	check := Limits{MaxDACVolts: 3.3}.Check()
 	return agent.Policy{
 		Allow: []string{
 			"status", "wiring", "power_status", "power_on", "power_off", "power_cycle_and_capture", "reset_target",
 			"uart_open", "uart_read", "uart_write", "uart_close", "capture_uart",
 			"capture_la", "decode_la", "la_pins",
 			"adc_read", "capture_adc", "dac_output", "dac_stop", "generate", "measure_power",
-			"enable_i2c_sensor", "set_i2c_sensor", "disable_i2c_sensor", "i2c_sensor_status", "i2c_sensor_types",
-			"i2c_sensor_capture", "i2c_sensor_regs", "set_pull", "pull_status",
+			"sensor_library", "sensor_show", "sensor_validate", "sensor_start", "sensor_set", "sensor_status",
+			"sensor_regs", "sensor_capture", "sensor_fault", "sensor_fault_clear", "sensor_stimulus_load",
+			"sensor_stimulus_start", "sensor_stimulus_stop", "sensor_stop", "set_pull", "pull_status",
 			"gpio_read",
 		},
-		Check:           Limits{MaxDACVolts: 3.3}.Check(),
+		Check: func(name string, args map[string]any) error {
+			if err := checkDefinitionArgs(name, args); err != nil {
+				return err
+			}
+			return check(name, args)
+		},
 		MaxToolCalls:    16,
 		MaxTurns:        18,
 		MaxOutputTokens: 1200,
@@ -220,6 +230,9 @@ func PodFiles(l Limits, allowed func(string) bool) agent.Policy {
 func podCheck(l Limits, allowed func(string) bool) func(string, map[string]any) error {
 	check := l.Check()
 	return func(name string, args map[string]any) error {
+		if err := checkDefinitionArgs(name, args); err != nil {
+			return err
+		}
 		if name == "flash" {
 			if f, _ := args["file"].(string); f != "" {
 				if allowed == nil || !allowed(f) {
@@ -238,6 +251,34 @@ func podCheck(l Limits, allowed func(string) bool) func(string, map[string]any) 
 		}
 		return check(name, args)
 	}
+}
+
+// definitionArgs are the sensor tools' arguments that take a definition or a stimulus: a library
+// name, YAML or JSON text, an object, or a path on the machine running the MCP server.
+var definitionArgs = map[string]string{
+	"sensor_start": "definition", "sensor_validate": "definition", "sensor_show": "name",
+	"sensor_stimulus_load": "stimulus",
+}
+
+// libraryName is a sensor library entry ("bmp280", "temperature_ramp_fault").
+var libraryName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// checkDefinitionArgs keeps a hosted agent to library names and inline definitions: a path there
+// is a file on the server, which the MCP server would read.
+func checkDefinitionArgs(name string, args map[string]any) error {
+	key, ok := definitionArgs[name]
+	if !ok {
+		return nil
+	}
+	s, isText := args[key].(string)
+	if !isText {
+		return nil // an object, or missing (the MCP server refuses that)
+	}
+	t := strings.TrimSpace(s)
+	if strings.Contains(t, "\n") || strings.HasPrefix(t, "{") || libraryName.MatchString(t) {
+		return nil
+	}
+	return fmt.Errorf("%s takes a library name (sensor_library lists them) or the definition itself as YAML or JSON here, not a file path", key)
 }
 
 // OfflineDeny are the tools that only work through embeddedci.com.
