@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { CaptureView, ChatView, ConsoleTerminal, FlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
+import { CaptureView, ChatView, ConsoleTerminal, FlashControls, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -227,7 +227,17 @@ export function App() {
             footer={footer}
             panelTabs={[
               { value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> },
-              { value: 'flash', label: 'Flash', content: <FlashControls call={bench.call} firmware={firmware} /> },
+              {
+                value: 'flash',
+                label: 'Flash',
+                content: (
+                  <>
+                    <FlashControls call={bench.call} firmware={firmware} />
+                    <Divider mx="sm" label="SPI flash chip" labelPosition="left" />
+                    <SpiFlashControls call={bench.call} images={firmware} dumpDir={state.data_dir} />
+                  </>
+                ),
+              },
               { value: 'wiring', label: 'Wiring', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
             ]}
             panelControls={{
