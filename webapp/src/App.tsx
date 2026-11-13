@@ -179,12 +179,16 @@ export function App() {
           ) : null}
         </Group>
         <Group gap="xs">
-          <Badge variant="default" style={{ cursor: 'pointer', textTransform: 'none' }} onClick={() => setSettingsOpen(true)}>
-            {state.settings.model || 'pick a model'}
-          </Badge>
-          <Button size="compact-sm" variant="subtle" onClick={() => void chat.reset()} disabled={chat.running}>
-            New chat
-          </Button>
+          {setup ? null : (
+            <>
+              <Badge variant="default" style={{ cursor: 'pointer', textTransform: 'none' }} onClick={() => setSettingsOpen(true)}>
+                {state.settings.model}
+              </Badge>
+              <Button size="compact-sm" variant="subtle" onClick={() => void chat.reset()} disabled={chat.running}>
+                New chat
+              </Button>
+            </>
+          )}
           <ActionIcon variant="subtle" onClick={() => setSettingsOpen(true)} aria-label="Settings">
             ⚙
           </ActionIcon>
@@ -206,31 +210,16 @@ export function App() {
           </Box>
         ) : view === 'sensors' ? (
           <SensorsView state={state} call={bench.call} onUpdateFirmware={() => setSettingsOpen(true)} />
-        ) : setup && !state.settings.model_skipped ? (
-          <Box maw={560} mx="auto" p="md" style={{ overflow: 'auto', height: '100%' }}>
-            <Card withBorder p="lg">
-              <Title order={4} mb={4}>
-                Pick a model
-              </Title>
-              <Text size="sm" c="dimmed" mb="md">
-                BenchPod Desktop works with any model that speaks the OpenAI API: one on your own computer (Ollama, LM Studio), your own account with a provider, or a server your team runs.
-              </Text>
-              <Anchor size="sm" mb="md" component="button" onClick={() => void api.saveSettings({ model_skipped: true }).then(setState)}>
-                Skip: use the bench controls without the agent
-              </Anchor>
-              <SettingsPanel state={state} onSaved={setState} />
-            </Card>
-          </Box>
         ) : (
           <ChatView
             items={chat.items}
             running={chat.running}
             onSend={(t) => void chat.send(t)}
-            disabledReason={setup ? 'Pick a model in Settings to ask the agent. The bench controls work without one.' : undefined}
+            disabledReason={setup ? 'AI is not configured' : undefined}
             onStop={() => void chat.stop()}
             onConfirm={(id, ok) => void chat.confirm(id, ok)}
-            suggestions={SUGGESTIONS}
-            tools={tools}
+            suggestions={setup ? undefined : SUGGESTIONS}
+            tools={setup ? undefined : tools}
             helpHref="https://www.embeddedci.com/docs/benchpod-ai-agent"
             toolsReferenceHref="https://www.embeddedci.com/docs/benchpod-mcp#tools"
             intro={
@@ -238,12 +227,22 @@ export function App() {
                 <Title order={3} ff="monospace">
                   benchpod agent
                 </Title>
-                <Text size="sm" c="dimmed">
-                  Ask it to test or debug your board. It asks before changing the hardware.
-                </Text>
+                {setup ? (
+                  <Text size="sm" c="dimmed">
+                    AI is not configured. Capture, logic analyzer, generator, power, console and flash work without it, in the bench panel.{' '}
+                    <Anchor size="sm" c="dimmed" underline="always" component="button" onClick={() => setSettingsOpen(true)}>
+                      Add a model in Settings
+                    </Anchor>
+                  </Text>
+                ) : (
+                  <Text size="sm" c="dimmed">
+                    Ask it to test or debug your board. It asks before changing the hardware.
+                  </Text>
+                )}
               </Stack>
             }
-            footer={footer}
+            footer={setup ? undefined : footer}
+            panelInitialTab={setup ? 'captures' : undefined}
             panelTabs={[
               { value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> },
               {
