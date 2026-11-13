@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -174,7 +175,49 @@ func (a *App) expandLocalWaveform(name string, args map[string]any) error {
 	if _, ok := args["sample_rate_hz"]; !ok {
 		args["sample_rate_hz"] = w.SampleRateHz
 	}
+	stuckLevel(args, w.Samples, scale)
 	return nil
+}
+
+// stuckLevel gives a stuck fault without a level the code of the sample just before its window,
+// so it freezes the output where the signal was (the web app's stuck). The pod's replay would hold
+// full scale instead, and the limits check the level that will play.
+func stuckLevel(args map[string]any, samples []float64, scale float64) {
+	f, ok := args["fault"].(map[string]any)
+	if !ok || f["type"] != "stuck" || f["level"] != nil || len(samples) == 0 {
+		return
+	}
+	i := 0
+	if s, ok := f["start"].(float64); ok && s >= 1 {
+		i = min(int(s)-1, len(samples)-1)
+	}
+	path, _ := args["dac_path"].(string)
+	lo, hi := outputSpan(path)
+	v := samples[i] * scale
+	if m, _ := args["mapping"].(string); m == "fit" {
+		lo, hi = samples[0]*scale, samples[0]*scale
+		for _, x := range samples {
+			lo, hi = min(lo, x*scale), max(hi, x*scale)
+		}
+	}
+	code := 32768.0
+	if hi > lo {
+		code = math.Round((v - lo) / (hi - lo) * 65535)
+	}
+	f["level"] = math.Max(0, math.Min(65535, code))
+}
+
+// outputSpan is the range a DAC output spans (nominal): volts, or amps on current_out.
+func outputSpan(path string) (float64, float64) {
+	switch path {
+	case "5v":
+		return 0, 5
+	case "12v":
+		return -12, 12
+	case "current_out":
+		return 0.004, 0.0201
+	}
+	return 0, 3.3
 }
 
 func (a *App) serveWaveforms(w http.ResponseWriter, r *http.Request) {

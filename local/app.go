@@ -78,6 +78,8 @@ type App struct {
 	console   consoleLog
 	waveforms waveformStore
 	updater   podUpdater
+	// output follows the routed DAC output for the policy's control-loop check.
+	output policy.Output
 }
 
 type podState struct {
@@ -140,7 +142,7 @@ func (a *App) buildAgent() *agent.Agent {
 
 // policy is the safety policy for the settings st: the agent's and the bench controls' alike.
 func (a *App) policy(st Settings) agent.Policy {
-	pol := policy.Desktop(st.Limits, st.ConfirmRisky)
+	pol := policy.Desktop(st.Limits, st.ConfirmRisky, &a.output)
 	if a.offline(st) {
 		pol = policy.Offline(pol)
 	}
@@ -289,6 +291,7 @@ func (a *App) connectPod(ctx context.Context, restart bool) (*agent.MCPTools, er
 		}
 	}
 	res, err := t.Call(ctx, "connect", map[string]any{})
+	a.output.Reset()
 	ps := podState{Connection: a.store.Load().Connection}
 	switch {
 	case err != nil:
@@ -360,6 +363,7 @@ func (a *App) prepareCall(name string, args map[string]any) {
 // afterCall follows up on a call that ran: the console log, and the wiring profile to keep.
 func (a *App) afterCall(source, name string, args map[string]any, res agent.ToolResult, err error) {
 	a.console.record(source, name, args, res, err)
+	a.output.Observe(name, args, err == nil && !res.IsError)
 	if name == "set_wiring" && err == nil && !res.IsError {
 		a.saveWiring(res.Structured)
 	}

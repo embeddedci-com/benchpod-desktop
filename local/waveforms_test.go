@@ -74,3 +74,24 @@ func TestWaveformLibrary(t *testing.T) {
 		t.Errorf("path traversal answered 200")
 	}
 }
+
+func TestStuckLevelHoldsTheSampleBefore(t *testing.T) {
+	samples := []float64{0, 1.65, 3.3, 0}
+	args := map[string]any{"dac_path": "3v3", "fault": map[string]any{"type": "stuck", "start": 2.0, "width": 1.0}}
+	stuckLevel(args, samples, 1)
+	if got := args["fault"].(map[string]any)["level"]; got != 32768.0 {
+		t.Errorf("stuck at sample 1 (1.65 V on 3v3): level %v, want 32768", got)
+	}
+	// Scaled to fit: the waveform's own range spans the codes.
+	args = map[string]any{"dac_path": "12v", "mapping": "fit", "fault": map[string]any{"type": "stuck", "start": 3.0}}
+	stuckLevel(args, samples, 1)
+	if got := args["fault"].(map[string]any)["level"]; got != 65535.0 {
+		t.Errorf("fit: level %v, want 65535", got)
+	}
+	// A level given, or another fault, is left alone.
+	args = map[string]any{"fault": map[string]any{"type": "spike", "start": 2.0}}
+	stuckLevel(args, samples, 1)
+	if _, set := args["fault"].(map[string]any)["level"]; set {
+		t.Error("spike got a level")
+	}
+}
