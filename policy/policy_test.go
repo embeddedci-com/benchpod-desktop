@@ -1,6 +1,9 @@
 package policy
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLimits(t *testing.T) {
 	check := Limits{MaxDACVolts: 3.3, MaxCurrentOut: 0.02}.Check()
@@ -48,6 +51,18 @@ func TestPoliciesHideConnectionTools(t *testing.T) {
 	for _, n := range []string{"connect", "flash", "spi_flash_program", "command", "set_wiring", "save_capture_as_recording"} {
 		if contains(demo.Allow, n) {
 			t.Errorf("demo offers %s", n)
+		}
+	}
+	// The sensor tools of embeddedci-mcp 2.13.11; the single-sensor ones are gone.
+	for _, n := range []string{"sensor_library", "sensor_show", "sensor_start", "sensor_set", "sensor_status",
+		"sensor_regs", "sensor_capture", "sensor_fault", "sensor_stimulus_load", "sensor_stop", "set_pull"} {
+		if !contains(demo.Allow, n) {
+			t.Errorf("demo lacks %s", n)
+		}
+	}
+	for _, n := range demo.Allow {
+		if strings.Contains(n, "i2c_sensor") || strings.Contains(n, "gps") {
+			t.Errorf("demo offers the removed tool %s", n)
 		}
 	}
 	pod := Pod(Limits{})
@@ -222,5 +237,36 @@ func TestLoopInputNeedsNoConfirm(t *testing.T) {
 	}
 	if !d.NeedsConfirm("control_loop") || !d.NeedsConfirm("analog_path") {
 		t.Error("control_loop and analog_path change the output: confirm them")
+	}
+}
+
+func TestDefinitionArgsStayOffTheServerDisk(t *testing.T) {
+	for _, p := range []struct {
+		name  string
+		check func(string, map[string]any) error
+	}{{"demo", Demo().Check}, {"AI tab", Pod(Limits{}).Check}} {
+		for _, args := range []map[string]any{
+			{"definition": "bmp280"},
+			{"definition": "format: 1\nkind: i2c\nname: x\n"},
+			{"definition": `{"format":1,"kind":"i2c"}`},
+			{"definition": map[string]any{"format": 1.0}},
+		} {
+			if err := p.check("sensor_start", args); err != nil {
+				t.Errorf("%s refuses %v: %v", p.name, args, err)
+			}
+		}
+		for tool, args := range map[string]map[string]any{
+			"sensor_start":         {"definition": "/etc/passwd"},
+			"sensor_validate":      {"definition": "../secrets.yaml"},
+			"sensor_show":          {"name": "bmp280.yaml"},
+			"sensor_stimulus_load": {"stimulus": "~/stim.yaml"},
+		} {
+			if p.check(tool, args) == nil {
+				t.Errorf("%s allows %s %v", p.name, tool, args)
+			}
+		}
+	}
+	if err := Desktop(Limits{}, true, nil).Check("sensor_start", map[string]any{"definition": "./my_part.yaml"}); err != nil {
+		t.Errorf("the desktop app reads local definition files: %v", err)
 	}
 }
