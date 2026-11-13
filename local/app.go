@@ -439,6 +439,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/console", a.serveConsole)
 	mux.HandleFunc("GET /api/capture/{kind}", a.serveCapture)
+	mux.HandleFunc("POST /api/pod/cli/{name}", a.servePodCLI)
 	mux.HandleFunc("GET /api/pod/firmware", a.servePodFirmware)
 	mux.HandleFunc("POST /api/pod/firmware/files", a.servePodFirmwareFile)
 	mux.HandleFunc("DELETE /api/pod/firmware/files", a.serveClearPodFirmwareFiles)

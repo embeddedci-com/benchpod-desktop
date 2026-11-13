@@ -87,6 +87,18 @@ its signature, restarts into it, then gets the gateware and Wi-Fi bridge images.
 bundled `benchpod` CLI for this (`benchpod flash-self --network`), over USB or your network; a
 pod on embeddedci.com updates from the web app.
 
+**This pod** (in Settings, under Pod firmware): the pod's board, firmware, connection, network
+address and USB network adapter at a glance; Wi-Fi (show the network, scan, join, forget); network
+access on Ethernet and Wi-Fi (open, locked or off) and HTTPS-only; the USB network adapter on or
+off; the firmware signature policy; and, with offline mode off and `benchpod login` done,
+deregistering the pod from embeddedci.com. The bundled `benchpod` CLI does the settings no
+BenchPod tool covers, over the pod's USB console. The Wi-Fi password goes to it on stdin and is
+never logged.
+
+**Calibration** (in Settings): what the pod has stored, the ADC offset (nothing on J8), each DAC
+output's line from two readings of your DMM, the ADC gains measured against those outputs, and
+going back to the built-in values (a second click confirms it).
+
 The controls use the same tools and the same safety settings as the agent: power, flashing and
 outputs ask first (unless you turned that off), the output limits apply, and every change goes to
 the action log. The agent reads the pod's state before it acts, so it sees what you changed.
