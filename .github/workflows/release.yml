@@ -134,6 +134,8 @@ jobs:
         working-directory: benchpod-cli
         env:
           CGO_ENABLED: ${{ matrix.goos == 'darwin' && '1' || '0' }}
+          # The CLI's go.mod may ask for a newer Go than this repository's: fetch that toolchain.
+          GOTOOLCHAIN: auto
         run: |
           go build -trimpath -ldflags "-s -w -X main.version=${BENCHPOD_CLI_REF#v}" \
             -o ../benchpod-desktop/desktop/src-tauri/binaries/benchpod-${{ matrix.target }}${{ matrix.ext }} ./cmd/benchpod-cli

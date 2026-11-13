@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- macOS asks before an app reaches devices on the local network. The app talks to the
+	     BenchPod on your network and over its USB network adapter, and finds it over mDNS. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>BenchPod Desktop talks to your BenchPod on your network and over its USB connection.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_benchpod._tcp</string>
+	</array>
+</dict>
+</plist>
