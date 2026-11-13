@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, Stack, Text, Title, Tooltip } from '@mantine/core'
+import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core'
 import { CaptureView, ChatView, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
 import { PodSetup } from './PodSetup'
+import { SensorsView } from './SensorsView'
+import { SensorLibrarySetting } from './SensorLibrarySetting'
 
 const SUGGESTIONS = [
   'What is on my bench? Check the pod status and the wiring.',
@@ -36,6 +38,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [findOpen, setFindOpen] = useState(false)
+  const [view, setView] = useState<'agent' | 'sensors'>('agent')
   const chat = useChat({ base: '/api/chat' })
   const tools = useTools('/api/chat')
   // The bench controls beside the chat: the same tools as the agent, through the same policy.
@@ -157,6 +160,18 @@ export function App() {
             benchpod
           </Title>
           {podBadge}
+          {state.settings.pod_setup_done && (
+            <SegmentedControl
+              size="xs"
+              aria-label="View"
+              value={view}
+              onChange={(v) => setView(v as 'agent' | 'sensors')}
+              data={[
+                { value: 'agent', label: 'Agent' },
+                { value: 'sensors', label: 'Sensors' },
+              ]}
+            />
+          )}
           {podUpdate ? (
             <Badge color="blue" variant="light" style={{ cursor: 'pointer' }} onClick={() => setSettingsOpen(true)}>
               pod firmware {podUpdate} available
@@ -189,6 +204,8 @@ export function App() {
               </Anchor>
             </Card>
           </Box>
+        ) : view === 'sensors' ? (
+          <SensorsView state={state} call={bench.call} onUpdateFirmware={() => setSettingsOpen(true)} />
         ) : setup && !state.settings.model_skipped ? (
           <Box maw={560} mx="auto" p="md" style={{ overflow: 'auto', height: '100%' }}>
             <Card withBorder p="lg">
@@ -280,6 +297,11 @@ export function App() {
         <PodSettings call={bench.call} podCall={podCli.call} offline={state.offline} />
         <Divider my="md" />
         <CalibrationControls call={bench.call} />
+        <Divider my="md" />
+        <Text fw={600} mb="xs">
+          Sensor library
+        </Text>
+        <SensorLibrarySetting offline={state.offline} />
       </Drawer>
     </Stack>
   )

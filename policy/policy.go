@@ -40,8 +40,8 @@ var ReadOnly = []string{
 	"list_waveforms", "adc_read", "gpio_read", "gpio_wait",
 	"capture_la", "capture_adc", "capture_uart", "capture_correlated", "decode_la",
 	"uart_read", "can_read", "can_status", "measure_power",
-	"i2c_sensor_status", "i2c_sensor_types", "i2c_sensor_regs", "i2c_sensor_capture",
-	"gps_status", "spi_flash_info", "spi_flash_read", "loop_probe", "cloud_list_devices",
+	"sensor_status", "sensor_regs", "sensor_capture", "sensor_library", "sensor_show",
+	"sensor_format", "sensor_validate", "spi_flash_info", "spi_flash_read", "loop_probe", "cloud_list_devices",
 }
 
 // Check returns an agent.Policy Check func enforcing the limits. It has no view of the routed

@@ -20,7 +20,7 @@ help:
 	@echo "  make dev           benchpod-local + the webapp with hot reload on :5176"
 	@echo "  make desktop       build the desktop app installer for this machine (needs Rust)"
 	@echo "  make desktop-dev   run the desktop app in development mode"
-	@echo "  make test          go test + the webapp typecheck + benchpod-ui tests"
+	@echo "  make test          go test + the webapp typecheck and tests + benchpod-ui tests"
 
 .PHONY: check-bpui
 check-bpui:
@@ -47,7 +47,7 @@ dev: check-bpui
 test: check-bpui
 	go vet ./... && go test ./...
 	cd ../benchpod-ui && ([ -d node_modules ] || npm ci)
-	cd webapp && ([ -d node_modules ] || npm ci) && npm run typecheck
+	cd webapp && ([ -d node_modules ] || npm ci) && npm run typecheck && npm test
 	cd ../benchpod-ui && npm test
 
 # ---- the desktop app (Tauri around the benchpod-local sidecar) ----

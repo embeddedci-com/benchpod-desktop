@@ -14,5 +14,5 @@
     "paths": { "@bpui": ["../../benchpod-ui/src/index.ts"], "@bpui/*": ["../../benchpod-ui/src/*"] }
   },
   "include": ["src", "../../benchpod-ui/src"],
-  "exclude": ["../../benchpod-ui/src/**/*.test.ts"]
+  "exclude": ["../../benchpod-ui/src/**/*.test.ts", "../../benchpod-ui/src/**/*.test.tsx"]
 }
