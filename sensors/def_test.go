@@ -167,3 +167,38 @@ func TestToYAMLQuotesStringsThatLookLikeNumbers(t *testing.T) {
 		t.Fatalf("%v\n%s", err, y)
 	}
 }
+
+// Word registers (i2c.register_bytes: 2: tmp117, ina219) and the 16-bit command map (sht3x,
+// scd4x) pass the header check; every embedded entry parses.
+func TestEmbeddedEntriesParse(t *testing.T) {
+	lib, err := LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lib.Entries) != 17 {
+		t.Fatalf("embedded copy has %d entries, want 17", len(lib.Entries))
+	}
+	for _, e := range lib.Entries {
+		_, src, ok := lib.Entry(e.Name)
+		if !ok {
+			t.Fatalf("%s: no source", e.Name)
+		}
+		def, err := Parse(src)
+		if err != nil {
+			t.Errorf("%s: %v", e.Name, err)
+			continue
+		}
+		if def.Name != e.Name || def.Kind != e.Kind {
+			t.Errorf("%s: parsed as %s/%s", e.Name, def.Name, def.Kind)
+		}
+	}
+	for _, name := range []string{"tmp117", "ina219", "sht3x", "scd4x"} {
+		if _, _, ok := lib.Entry(name); !ok {
+			t.Errorf("%s missing from the embedded copy", name)
+		}
+	}
+	def, err := Parse([]byte("format: 1\nkind: i2c\nname: w\nlabel: Word sensor\ni2c: { address: 0x48, register_bytes: 2 }\nregisters:\n  - { at: 0x00, u16be: 1 }\n"))
+	if err != nil || !strings.Contains(string(def.JSON), `"register_bytes":2`) {
+		t.Fatalf("register_bytes: %v %s", err, def.JSON)
+	}
+}
