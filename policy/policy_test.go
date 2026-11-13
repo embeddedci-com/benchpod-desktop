@@ -3,6 +3,8 @@ package policy
 import (
 	"strings"
 	"testing"
+
+	"github.com/embeddedci-com/benchpod-desktop/agent"
 )
 
 func TestLimits(t *testing.T) {
@@ -232,10 +234,10 @@ func TestControlLoopClamp(t *testing.T) {
 
 func TestLoopInputNeedsNoConfirm(t *testing.T) {
 	d := Desktop(Limits{}, true, nil)
-	if d.NeedsConfirm("loop_input") {
+	if d.NeedsConfirm("loop_input", nil) {
 		t.Error("loop_input only moves an armed loop's input: no confirmation")
 	}
-	if !d.NeedsConfirm("control_loop") || !d.NeedsConfirm("analog_path") {
+	if !d.NeedsConfirm("control_loop", nil) || !d.NeedsConfirm("analog_path", nil) {
 		t.Error("control_loop and analog_path change the output: confirm them")
 	}
 }
@@ -268,5 +270,34 @@ func TestDefinitionArgsStayOffTheServerDisk(t *testing.T) {
 	}
 	if err := Desktop(Limits{}, true, nil).Check("sensor_start", map[string]any{"definition": "./my_part.yaml"}); err != nil {
 		t.Errorf("the desktop app reads local definition files: %v", err)
+	}
+}
+
+func TestBusDrivingCallsAreConfirmed(t *testing.T) {
+	for _, p := range []struct {
+		name string
+		pol  agent.Policy
+	}{{"desktop", Desktop(Limits{}, true, nil)}, {"pod", Pod(Limits{})}} {
+		for _, tool := range []string{"i2c_open", "i2c_transfer", "i2c_scan"} {
+			if !p.pol.NeedsConfirm(tool, nil) {
+				t.Errorf("%s: %s should need a confirmation", p.name, tool)
+			}
+		}
+		if p.pol.NeedsConfirm("capture_la", map[string]any{"samples": 4096}) {
+			t.Errorf("%s: a plain capture_la should not need a confirmation", p.name)
+		}
+		send := map[string]any{"samples": 4096, "send": map[string]any{"bus": "i2c", "addr": 72}}
+		if !p.pol.NeedsConfirm("capture_la", send) {
+			t.Errorf("%s: capture_la with a send drives the bus and should need a confirmation", p.name)
+		}
+		if p.pol.NeedsConfirm("capture_la", map[string]any{"send": nil}) {
+			t.Errorf("%s: a null send is no send", p.name)
+		}
+	}
+	if Desktop(Limits{}, false, nil).NeedsConfirm("capture_la", map[string]any{"send": map[string]any{}}) {
+		t.Error("confirmations off: capture_la with a send runs without asking, like the risky tools")
+	}
+	if err := Demo().Check("capture_la", map[string]any{"send": map[string]any{"bus": "gpio"}}); err == nil {
+		t.Error("the demo should refuse capture_la with a send")
 	}
 }
