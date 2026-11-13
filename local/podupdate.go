@@ -256,16 +256,7 @@ func (a *App) servePodFirmwareUpdate(w http.ResponseWriter, r *http.Request) {
 	before, _ := a.runningFirmware()
 
 	// The pod restarts: let go of it first, and connect again on the next call.
-	a.connMu.Lock()
-	a.mu.Lock()
-	t := a.tools
-	a.tools, a.pod, a.mcpState = nil, podState{}, MCPStopped
-	a.mu.Unlock()
-	a.console.reset()
-	if t != nil {
-		_ = t.Close()
-	}
-	a.connMu.Unlock()
+	a.releasePod()
 
 	send(map[string]any{"type": "line", "text": "benchpod " + strings.Join(args, " ")})
 	// An update is never cut off half-way by a closed page: it runs to its end.

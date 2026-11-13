@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { CaptureView, ChatView, ConsoleTerminal, FlashControls, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
+import { CaptureView, ChatView, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -40,6 +40,8 @@ export function App() {
   const tools = useTools('/api/chat')
   // The bench controls beside the chat: the same tools as the agent, through the same policy.
   const bench = useBenchCall('/api/tool')
+  // The pod's own settings no MCP tool covers (Wi-Fi, LAN access...): the bundled benchpod CLI.
+  const podCli = useBenchCall('/api/pod/cli')
   const agentWiring = useMemo(
     () => chat.items.filter((it) => it.kind === 'tool' && !!it.result && WIRING_TOOLS.test(it.call.name)).length,
     [chat.items],
@@ -250,6 +252,7 @@ export function App() {
       </Box>
 
       {bench.dialog}
+      {podCli.dialog}
 
       <Modal opened={findOpen} onClose={() => setFindOpen(false)} title="Find your pod" size="lg">
         <PodSetup
@@ -273,6 +276,10 @@ export function App() {
           Pod firmware
         </Text>
         <PodUpdate updater={podUpdater} connected={state.pod.connected} />
+        <Divider my="md" />
+        <PodSettings call={bench.call} podCall={podCli.call} offline={state.offline} />
+        <Divider my="md" />
+        <CalibrationControls call={bench.call} />
       </Drawer>
     </Stack>
   )
