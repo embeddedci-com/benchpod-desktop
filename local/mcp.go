@@ -14,7 +14,7 @@ import (
 
 // MCPSpec is the BenchPod MCP server the app runs: the same embeddedci-mcp the Claude and
 // Codex plugins run, so a change to it reaches the app with no change here.
-const MCPSpec = "embeddedci-mcp>=2.13,<3"
+const MCPSpec = "embeddedci-mcp>=2.13.15,<3"
 
 // mcpCommand finds a way to start the MCP server, in this order:
 //
