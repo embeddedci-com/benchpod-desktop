@@ -45,7 +45,7 @@ func main() {
 		open     = flag.Bool("open", true, "open the app in the default browser once it is ready")
 		lifeline = flag.Bool("lifeline", false, "exit when stdin closes (used by the desktop app, so the server never outlives it)")
 		webDir   = flag.String("webapp", envOr("BENCHPOD_LOCAL_WEBAPP", ""), "serve the webapp from this directory instead of the embedded copy (development)")
-		envFile  = flag.String("env-file", ".env", "a .env file with development keys (BENCHPOD_MODEL_API_KEY, OPENROUTER_API_KEY, BENCHPOD_MCP_COMMAND); missing is fine")
+		envFile  = flag.String("env-file", "", "a .env file with development keys (BENCHPOD_MODEL_API_KEY, OPENROUTER_API_KEY, BENCHPOD_MCP_COMMAND); missing is fine. Off by default: a .env in whatever folder the app starts from is not trusted")
 		showVer  = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Parse()

@@ -41,7 +41,7 @@ run-local: local
 	./bin/benchpod-local
 
 dev: check-bpui
-	go run ./cmd/benchpod-local -open=false & \
+	go run ./cmd/benchpod-local -open=false -env-file .env & \
 	cd webapp && ([ -d node_modules ] || npm ci) && npx vite --open
 
 test: check-bpui

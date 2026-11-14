@@ -250,7 +250,7 @@ builds the desktop installer for your machine.
 
 ### Development keys
 
-Copy `.env.example` to `.env` (it is git-ignored) for keys during development, for example
+Copy `.env.example` to `.env` (it is git-ignored) for keys during development (`make dev` reads it; `benchpod-local` reads a `.env` in the working folder only with `-env-file .env`), for example
 `BENCHPOD_MODEL_API_KEY` or `OPENROUTER_API_KEY`, and `BENCHPOD_MCP_COMMAND` to run the MCP
 server from a checkout. A key typed in the app goes to the keychain instead.
 
