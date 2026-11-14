@@ -124,8 +124,8 @@ an I2C, SPI, UART or analog part, described in a YAML file
   reads. They are files on this computer, in the data folder's `sensors` folder
   (`sensors/<kind>/<name>.yaml`, `stimuli/<name>.yaml`), kept as you wrote them. Upload a file,
   or download one or all of them (a zip): downloads go to your Downloads folder.
-- **On the pod**: start a sensor on the LA channels from the wiring (an I2C start switches on
-  the pull-ups, after asking), change its values while the firmware runs, inject faults, read
+- **On the pod**: start a sensor on the LA channels from the wiring, after asking (an I2C start
+  switches on the pull-ups when they are off, after asking too), change its values while the firmware runs, inject faults, read
   back its registers, play a stimulus.
 
 Running sensors needs pod firmware that plays them; with older firmware the view says so and
@@ -142,7 +142,11 @@ else the built-in one, with a note.
 An agent driving real hardware gets limits it cannot talk its way past. They are enforced in the
 app, before a tool runs, never only in the prompt:
 
-- **Confirmations**: power, flashing, outputs and pod settings wait for your yes (on by default).
+- **Confirmations**: power, flashing, outputs, pod settings, opening a bus (UART, CAN, I2C) and
+  starting an emulated sensor wait for your yes (on by default). Every write to the board asks
+  (an I2C write, SPI, CAN, GPIO); reads on a bus you opened do not (an I2C scan, a plain read or a
+  register read: a register address of one or two bytes, then the read), so a device's "Read all"
+  runs without a question per register. Typing in the console does not ask either.
 - **Limits**: a ceiling for the DAC output voltage and the 4-20 mA loop current, for DC levels,
   generated waveforms and replays alike (a replay scaled to fill an output counts as that output's
   full range), a fault's level, and the control loop's clamp. The loop drives the output last

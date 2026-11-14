@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Box, Stack } from '@mantine/core'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Box, Button, Group, Modal, Stack, Text } from '@mantine/core'
 import { benchData, benchError, effectiveWiring, laChannelLabel, type BenchCall, type Wiring } from '@bpui'
 import { SensorsPage, type BenchHooks, type SensorKind, type SensorPins } from '@bpui/sensors'
 import type { AppState } from './api'
-import { localFiles, localSensorPod, localSensorStore } from './sensors'
+import { localFiles, localSensorPod, localSensorStore, setSensorConfirm } from './sensors'
 
 /**
  * The Sensors view: user-defined sensors (benchpod-ui src/sensors, shared with the web app) over
@@ -17,6 +17,30 @@ export function SensorsView({ state, call, onUpdateFirmware }: { state: AppState
   const capable = !connected ? null : caps?.sensors === true
   const [wiring, setWiring] = useState<Wiring | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  // Starting an emulated sensor asks first (benchpod-local answers confirm): it can swap the pod's
+  // FPGA image and drives the LA pins the sensor uses.
+  const [asking, setAsking] = useState<Record<string, unknown> | null>(null)
+  const answer = useRef<((ok: boolean) => void) | null>(null)
+  useEffect(() => {
+    setSensorConfirm(
+      (command) =>
+        new Promise<boolean>((resolve) => {
+          answer.current?.(false)
+          answer.current = resolve
+          setAsking(command)
+        }),
+    )
+    return () => {
+      setSensorConfirm(null)
+      answer.current?.(false)
+      answer.current = null
+    }
+  }, [])
+  const reply = (ok: boolean) => {
+    answer.current?.(ok)
+    answer.current = null
+    setAsking(null)
+  }
 
   const loadWiring = useCallback(async () => {
     const d = benchData<{ profile: Record<string, unknown> }>(await call('wiring', {}, { poll: true }))
@@ -36,6 +60,10 @@ export function SensorsView({ state, call, onUpdateFirmware }: { state: AppState
         if (kind !== 'i2c' || wiring?.la_mv === 1800) return
         const las = [Number(pins.sda), Number(pins.scl)].filter((la) => la >= 1 && la <= 6)
         if (!las.length) return
+        // Already on: no need to ask for them (the start itself still asks).
+        const ps = benchData<{ channels?: { la: number; enabled: boolean; direction: string }[] }>(await call('pull_status', {}, { poll: true }))
+        const on = (la: number) => !!ps?.channels?.some((c) => c.la === la && c.enabled && c.direction === 'up')
+        if (las.every(on)) return
         const r = await call('set_pull', { las, enabled: true })
         if (r.declined) throw new Error('Not started: the pull-ups were declined.')
         const e = benchError(r)
@@ -54,6 +82,23 @@ export function SensorsView({ state, call, onUpdateFirmware }: { state: AppState
             Saved to {saved}
           </Alert>
         )}
+        <Modal opened={!!asking} onClose={() => reply(false)} title="Start the emulated sensor?" centered>
+          <Stack gap="sm">
+            <Text size="sm">{startSummary(asking)}</Text>
+            <Text size="xs" c="dimmed">
+              The pod loads its sensor emulation image if another one runs (captures and the generator wait until the sensor stops) and
+              drives the pins the sensor uses. You can turn these questions off in Settings.
+            </Text>
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => reply(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => reply(true)} data-autofocus>
+                Start
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
         <SensorsPage
           store={localSensorStore}
           pod={localSensorPod}
@@ -67,6 +112,17 @@ export function SensorsView({ state, call, onUpdateFirmware }: { state: AppState
       </Stack>
     </Box>
   )
+}
+
+/** One line for the start dialog: which sensor, on which pins, at which address. */
+export function startSummary(c: Record<string, unknown> | null): string {
+  if (!c) return ''
+  const pins = c.pins && typeof c.pins === 'object' ? (c.pins as Record<string, unknown>) : {}
+  const pinText = Object.entries(pins)
+    .map(([k, v]) => `${k.toUpperCase()} ${typeof v === 'number' ? `LA${v}` : String(v)}`)
+    .join(', ')
+  const addr = typeof c.address === 'string' ? c.address : typeof c.address === 'number' ? `0x${c.address.toString(16).padStart(2, '0')}` : ''
+  return `Start "${String(c.instance ?? 'sensor')}"${pinText ? ` on ${pinText}` : ''}${addr ? `, address ${addr}` : ''}.`
 }
 
 const signalLa = (w: Wiring, ...names: string[]): number | undefined => {

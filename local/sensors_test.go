@@ -318,6 +318,11 @@ func TestSensorCommandOnlySensorCommands(t *testing.T) {
 	if st, _, _ := c.do("POST", "/api/sensors/command", map[string]any{}, &e); st != 400 {
 		t.Fatalf("no command: %d", st)
 	}
+	// sensor_start asks first (confirmations are on by default): nothing runs, no pod needed.
+	var ask struct{ Confirm bool }
+	if st, _, _ := c.do("POST", "/api/sensors/command", map[string]any{"command": map[string]any{"cmd": "sensor_start", "instance": "env"}}, &ask); st != 200 || !ask.Confirm {
+		t.Fatalf("sensor_start without a yes: %d %+v", st, ask)
+	}
 	got := sensorLogArgs(map[string]any{"cmd": "sensor_define", "data_b64": "QUJD", "offset": 0})
 	if got["data_b64"] != "[4 base64 chars]" || got["offset"] != 0 {
 		t.Fatalf("log args: %v", got)

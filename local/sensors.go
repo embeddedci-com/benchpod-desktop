@@ -734,11 +734,15 @@ func (a *App) serveSetSensorLibrary(w http.ResponseWriter, r *http.Request) {
 
 // serveSensorCommand sends one sensor command to the pod (the MCP server's raw command tool), for
 // the page's SensorPod. Only sensor_* commands pass: anything else goes through the tools and the
-// policy. Starting an emulated sensor is what the user's Start click asks for, so it does not ask
-// again; every command goes to the action log (a chunk upload without its data).
+// policy. sensor_start asks first, like the other calls that change what the DUT sees (it can
+// swap the pod's FPGA image and drives LA pins): with confirmations on it answers
+// {"confirm": true} without running until the page sends it again with "confirmed": true. The
+// commands on a started sensor (values, faults, stimulus, stop) do not ask. Every command goes to
+// the action log (a chunk upload without its data).
 func (a *App) serveSensorCommand(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Command map[string]any `json:"command"`
+		Command   map[string]any `json:"command"`
+		Confirmed bool           `json:"confirmed"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil || body.Command == nil {
 		sensorError(w, http.StatusBadRequest, "", `send {"command": {"cmd": "sensor_...", ...}}`)
@@ -751,6 +755,10 @@ func (a *App) serveSensorCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	if !a.policy(a.store.Load()).Allows("command") {
 		sensorError(w, http.StatusForbidden, "", "pod commands are not available here")
+		return
+	}
+	if cmd == "sensor_start" && a.store.Load().ConfirmRisky && !body.Confirmed {
+		chat.WriteJSON(w, http.StatusOK, map[string]any{"confirm": true})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)

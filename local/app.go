@@ -58,6 +58,21 @@ const (
 	MCPFailed     MCPState = "failed"
 )
 
+// InstallTimeout bounds installing uv on first start; StartTimeout bounds starting the MCP server
+// (its first run downloads Python and the package). Variables for the tests.
+var (
+	InstallTimeout = 4 * time.Minute
+	StartTimeout   = 5 * time.Minute
+)
+
+// setMCPState records a lifecycle change and when it happened. Call it with a.mu held.
+func (a *App) setMCPState(s MCPState, errText string) {
+	if s != a.mcpState {
+		a.mcpSince = time.Now()
+	}
+	a.mcpState, a.mcpErr = s, errText
+}
+
 // App is the desktop backend.
 type App struct {
 	Version string
@@ -72,11 +87,13 @@ type App struct {
 	tools     *agent.MCPTools
 	mcpState  MCPState
 	mcpErr    string
+	mcpSince  time.Time // when mcpState last changed
 	mcpLog    *ringLog
 	pod       podState
 	session   *chat.Session
 	actions   *os.File
 	console   consoleLog
+	buses     busSessions // the open I2C, UART and CAN sessions (bussessions.go)
 	waveforms waveformStore
 	// sequences: the bus console's saved sequences (sequences.go); accountClient, when set, is the
 	// HTTP client for embeddedci.com (tests).
@@ -211,18 +228,19 @@ func (a *App) Close() {
 // startMCP (re)starts the MCP server with the current settings.
 func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	a.console.reset()
+	a.buses.reset()
 	a.mu.Lock()
 	old := a.tools
 	a.tools = nil
 	a.pod = podState{}
-	a.mcpState, a.mcpErr = MCPStarting, ""
+	a.setMCPState(MCPStarting, "")
 	a.mu.Unlock()
 	if old != nil {
 		_ = old.Close()
 	}
 	fail := func(err error) (*agent.MCPTools, error) {
 		a.mu.Lock()
-		a.mcpState, a.mcpErr = MCPFailed, err.Error()
+		a.setMCPState(MCPFailed, err.Error())
 		a.mu.Unlock()
 		return nil, err
 	}
@@ -236,12 +254,22 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	name, args, err := mcpCommand(ctx, a.keys.Env, a.store.Dir(), false, offline, a.mcpLog.Printf)
 	if err != nil {
 		a.mu.Lock()
-		a.mcpState = MCPInstalling
+		a.setMCPState(MCPInstalling, "")
 		a.mu.Unlock()
-		name, args, err = mcpCommand(ctx, a.keys.Env, a.store.Dir(), true, offline, a.mcpLog.Printf)
+		// The install outlives the request that started it (a page reload must not leave it half
+		// done) but never runs for ever: the badge then says it failed instead of "installing".
+		ictx, icancel := context.WithTimeout(context.WithoutCancel(ctx), InstallTimeout)
+		name, args, err = mcpCommand(ictx, a.keys.Env, a.store.Dir(), true, offline, a.mcpLog.Printf)
+		icancel()
 		if err != nil {
+			if ictx.Err() == context.DeadlineExceeded {
+				err = fmt.Errorf("installing the BenchPod tools took longer than %s: check the internet connection and retry (%v)", InstallTimeout, err)
+			}
 			return fail(err)
 		}
+		a.mu.Lock()
+		a.setMCPState(MCPStarting, "")
+		a.mu.Unlock()
 	}
 	if st.Connection != "" {
 		args = append(args, "--connection", st.Connection)
@@ -275,14 +303,18 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	}
 	a.mcpLog.Printf("starting %s %s", name, strings.Join(args, " "))
 	// The first uvx run downloads Python and the package: give it time.
-	sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	sctx, cancel := context.WithTimeout(ctx, StartTimeout)
 	defer cancel()
 	t, err := agent.StartMCP(sctx, cmd, "benchpod-desktop", a.Version)
 	if err != nil {
+		if sctx.Err() == context.DeadlineExceeded {
+			err = fmt.Errorf("the BenchPod tools did not start within %s (the first start downloads them): retry (%v)", StartTimeout, err)
+		}
 		return fail(err)
 	}
 	a.mu.Lock()
-	a.tools, a.mcpState = t, MCPReady
+	a.tools = t
+	a.setMCPState(MCPReady, "")
 	a.mu.Unlock()
 	return t, nil
 }
@@ -305,6 +337,7 @@ func (a *App) connectPod(ctx context.Context, restart bool) (*agent.MCPTools, er
 	}
 	res, err := t.Call(ctx, "connect", map[string]any{})
 	a.output.Reset()
+	a.buses.reset()
 	ps := podState{Connection: a.store.Load().Connection}
 	switch {
 	case err != nil:
@@ -377,6 +410,7 @@ func (a *App) prepareCall(name string, args map[string]any) {
 func (a *App) afterCall(source, name string, args map[string]any, res agent.ToolResult, err error) {
 	a.console.record(source, name, args, res, err)
 	a.output.Observe(name, args, err == nil && !res.IsError)
+	a.buses.observe(name, res.Structured, err == nil && !res.IsError)
 	if name == "set_wiring" && err == nil && !res.IsError {
 		a.saveWiring(res.Structured)
 	}
@@ -451,6 +485,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/pod/find", a.servePodFind)
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/console", a.serveConsole)
+	mux.HandleFunc("GET /api/bus/sessions", a.serveBusSessions)
 	mux.HandleFunc("GET /api/capture/{kind}", a.serveCapture)
 	mux.HandleFunc("POST /api/pod/cli/{name}", a.servePodCLI)
 	mux.HandleFunc("GET /api/pod/firmware", a.servePodFirmware)
@@ -483,6 +518,9 @@ func (a *App) serveState(w http.ResponseWriter, r *http.Request) {
 	_, src := a.keys.Get(st.Provider)
 	a.mu.Lock()
 	mcp := map[string]any{"state": a.mcpState, "error": a.mcpErr}
+	if !a.mcpSince.IsZero() {
+		mcp["since"] = a.mcpSince.UTC().Format(time.RFC3339)
+	}
 	pod := a.pod
 	a.mu.Unlock()
 	chat.WriteJSON(w, http.StatusOK, map[string]any{

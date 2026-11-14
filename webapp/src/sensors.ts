@@ -91,15 +91,37 @@ export const localSensorStore: SensorStore = {
   setLibraryVersion: (version: string) => json<LibrarySettings>(`${L}/settings`, 'PUT', { version }),
 }
 
-/** The connected pod's sensors, one command at a time through benchpod-local. */
-export const localSensorPod: SensorPod = commandSensorPod(async (command) => {
+/** Asks the user before a sensor command that changes what the DUT sees (sensor_start). */
+export type SensorConfirm = (command: Record<string, unknown>) => Promise<boolean>
+
+let askSensor: SensorConfirm | null = null
+
+/** The Sensors view registers its dialog here; null unregisters it. */
+export function setSensorConfirm(ask: SensorConfirm | null) {
+  askSensor = ask
+}
+
+async function postSensorCommand(command: Record<string, unknown>, confirmed: boolean) {
   const r = await fetch('/api/sensors/command', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command }),
+    body: JSON.stringify({ command, confirmed }),
   })
-  const body = (await r.json().catch(() => ({}))) as { reply?: Record<string, unknown>; error?: string }
+  const body = (await r.json().catch(() => ({}))) as { reply?: Record<string, unknown>; error?: string; confirm?: boolean }
   if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`)
+  return body
+}
+
+/**
+ * The connected pod's sensors, one command at a time through benchpod-local. A command the app
+ * wants a yes for (confirm=true, not run) is asked in the Sensors view's dialog and sent again.
+ */
+export const localSensorPod: SensorPod = commandSensorPod(async (command) => {
+  let body = await postSensorCommand(command, false)
+  if (body.confirm) {
+    if (!askSensor || !(await askSensor(command))) throw new Error('Not started: you declined it.')
+    body = await postSensorCommand(command, true)
+  }
   return body.reply ?? {}
 })
 

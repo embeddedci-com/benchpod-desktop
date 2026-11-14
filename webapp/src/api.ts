@@ -49,7 +49,8 @@ export type AppState = {
   presets: Preset[]
   recommended: ModelInfo[]
   model_warning: string
-  mcp: { state: 'stopped' | 'installing' | 'starting' | 'ready' | 'failed'; error: string }
+  /** since: when the current state began (RFC 3339), for how long an install or start has run. */
+  mcp: { state: 'stopped' | 'installing' | 'starting' | 'ready' | 'failed'; error: string; since?: string }
   pod: { connected: boolean; connection?: string; error?: string; status?: Record<string, unknown> }
   data_dir: string
   offline: boolean

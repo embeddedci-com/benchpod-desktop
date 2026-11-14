@@ -23,8 +23,14 @@ type Limits struct {
 	MaxCurrentOut float64 `json:"max_current_out"` // current_out amps (the 4-20 mA loop)
 }
 
-// Risky are the tools that change what the DUT sees: power, firmware, outputs, pod settings.
-// The desktop app asks before each of them unless the user turned confirmations off.
+// Risky are the tools that change what the DUT sees: power, firmware, outputs, pod settings, and
+// opening a bus (the pod starts driving the DUT's pins, a CAN node switches its termination). The
+// desktop app asks before each of them unless the user turned confirmations off.
+//
+// Using a bus that is already open does not ask again for plain reads: i2c_scan, and an
+// i2c_transfer that writes nothing or only a register address before its read (see ConfirmArgs).
+// Every write to the DUT asks: i2c_transfer with data, spi_transfer, can_write, gpio_write.
+// uart_write does not: it is the console's typing on a UART the user opened (uart_open asks).
 var Risky = []string{
 	"power_on", "power_off", "power_cycle_and_capture", "reset_target",
 	"flash", "spi_flash_program",
@@ -33,10 +39,57 @@ var Risky = []string{
 	"set_wiring", "fpga_image", "calibrate", "calibrate_dac", "calibrate_adc_gain",
 	"lan_tls", "usb_network", "command",
 	"can_write", "can_respond", "spi_transfer",
-	// The pod as I2C master drives SCL and SDA (a scan probes every address).
-	"i2c_open", "i2c_transfer", "i2c_scan",
+	// Opening a bus: the UART drives TX into the DUT, CAN joins the bus and sets the 120 ohm
+	// termination, the pod as I2C master drives SCL and SDA (and may switch pull-ups on).
+	"uart_open", "can_open", "i2c_open",
 	// Emulated sensors drive LA pins (I2C, SPI, UART, data-ready) and can load the emulation image.
 	"sensor_start", "sensor_fault", "sensor_stimulus_start",
+}
+
+// ConfirmArgs says whether a call that is not in Risky still needs the user's yes because of its
+// arguments: a capture that drives the bus (DrivesBus), or an I2C transfer that writes to the
+// device (I2CWrites). Hosts set it as the policy's ConfirmIf.
+func ConfirmArgs(name string, args map[string]any) bool {
+	return DrivesBus(name, args) || I2CWrites(name, args)
+}
+
+// I2CWrites says whether an i2c_transfer changes the device: it writes data. A probe (nothing
+// written, nothing read), a plain read, and a register read (one or two address bytes, then a read
+// after a repeated START) only move the device's register pointer, so they run on the open session
+// without asking: a device view's "Read all" is a batch of those. A write without a read, or more
+// than two bytes before a read, is a write and asks. Arguments it cannot read count as a write.
+func I2CWrites(name string, args map[string]any) bool {
+	if name != "i2c_transfer" {
+		return false
+	}
+	var w string
+	switch v := args["write_hex"].(type) {
+	case nil:
+	case string:
+		w = strings.Map(func(r rune) rune {
+			if r == ' ' || r == ':' || r == ',' || r == '_' {
+				return -1
+			}
+			return r
+		}, v)
+		w = strings.TrimPrefix(strings.TrimPrefix(w, "0x"), "0X")
+	default:
+		return true
+	}
+	if w == "" {
+		return false
+	}
+	if len(w)%2 != 0 {
+		return true
+	}
+	read, ok := num(args["read"])
+	if args["read"] == nil {
+		read, ok = 0, true
+	}
+	if !ok {
+		return true
+	}
+	return !(read > 0 && len(w)/2 <= 2)
 }
 
 // DrivesBus says whether a call that is otherwise read-only also drives the DUT's pins:
@@ -53,7 +106,7 @@ func DrivesBus(name string, args map[string]any) bool {
 // ReadOnly are tools that only observe (capture_la only without a send, see DrivesBus). They never need a confirmation.
 var ReadOnly = []string{
 	"status", "wiring", "power_status", "pull_status", "la_pins", "la_timing", "calibration",
-	"list_waveforms", "adc_read", "gpio_read", "gpio_wait",
+	"list_waveforms", "adc_read", "gpio_read", "gpio_wait", "i2c_scan",
 	"capture_la", "capture_adc", "capture_uart", "capture_correlated", "decode_la",
 	"uart_read", "can_read", "can_status", "measure_power",
 	"sensor_status", "sensor_regs", "sensor_capture", "sensor_library", "sensor_show",
@@ -185,7 +238,7 @@ func Desktop(l Limits, confirm bool, out *Output) agent.Policy {
 	}
 	if confirm {
 		p.Confirm = Risky
-		p.ConfirmIf = DrivesBus
+		p.ConfirmIf = ConfirmArgs
 	}
 	return p
 }
@@ -234,7 +287,7 @@ func PodFiles(l Limits, allowed func(string) bool) agent.Policy {
 			"save_capture_as_recording", "lan_tls", "usb_network", "command",
 		},
 		Confirm:         Risky,
-		ConfirmIf:       DrivesBus,
+		ConfirmIf:       ConfirmArgs,
 		Check:           podCheck(l, allowed),
 		MaxToolCalls:    30,
 		MaxTurns:        36,

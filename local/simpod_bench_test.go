@@ -86,6 +86,10 @@ func TestFindPodAndBenchControlsOnSimulatedPod(t *testing.T) {
 		t.Errorf("power_status after power_on: %s", r.Text)
 	}
 	post("/api/tool/uart_open", map[string]any{"args": map[string]any{}}, &r)
+	if !r.Confirm {
+		t.Fatalf("uart_open without a yes: %+v", r)
+	}
+	post("/api/tool/uart_open", map[string]any{"args": map[string]any{}, "confirmed": true}, &r)
 	if r.IsError {
 		t.Fatalf("uart_open: %s", r.Text)
 	}

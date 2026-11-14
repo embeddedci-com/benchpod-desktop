@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // MCPSpec is the BenchPod MCP server the app runs: the same embeddedci-mcp the Claude and
@@ -94,9 +95,12 @@ func installUV(ctx context.Context, dir string) error {
 	if runtime.GOOS == "windows" {
 		cmd = exec.CommandContext(ctx, "powershell", "-NoProfile", "-ExecutionPolicy", "ByPass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex")
 	} else {
-		cmd = exec.CommandContext(ctx, "sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh")
+		cmd = exec.CommandContext(ctx, "sh", "-c", "curl -LsSf --connect-timeout 30 --max-time 180 https://astral.sh/uv/install.sh | sh")
 	}
 	cmd.Env = append(os.Environ(), "UV_UNMANAGED_INSTALL="+tmp)
+	// When ctx ends only the shell is killed: its children (curl, the installer's downloads) can
+	// hold the output pipe open and keep CombinedOutput waiting. WaitDelay closes it.
+	cmd.WaitDelay = 5 * time.Second
 	if out, err := cmd.CombinedOutput(); err != nil {
 		_ = os.RemoveAll(tmp)
 		return fmt.Errorf("%v: %s", err, lastLine(string(out)))
