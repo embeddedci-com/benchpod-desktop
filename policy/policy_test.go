@@ -332,3 +332,41 @@ func TestBusDrivingCallsAreConfirmed(t *testing.T) {
 		t.Error("the demo should refuse capture_la with a send")
 	}
 }
+
+// A tool the policy does not classify asks; side effects named by the security review ask; a
+// read that writes a file on this computer asks; closing and stopping do not.
+func TestUnclassifiedAndSideEffectToolsAsk(t *testing.T) {
+	p := Desktop(Limits{}, true, nil)
+	ask := map[string]map[string]any{
+		"some_new_tool":             {},
+		"vision_press":              {"name": "Factory reset"},
+		"vision_tap":                {},
+		"la_step":                   {},
+		"la_dir":                    {},
+		"sensor_set":                {},
+		"vision_connect":            {"connection": "evil:80"},
+		"spi_flash_read":            {"addr": 0, "length": 16, "file": "/Users/x/.zshrc"},
+		"save_capture_as_recording": {},
+	}
+	for name, args := range ask {
+		if !p.NeedsConfirm(name, args) {
+			t.Errorf("%s %v: want a confirmation", name, args)
+		}
+	}
+	quiet := map[string]map[string]any{
+		"spi_flash_read": {"addr": 0, "length": 16},
+		"dac_stop":       {},
+		"i2c_close":      {},
+		"uart_write":     {"text": "help\n"},
+		"status":         {},
+		"vision_look":    {},
+	}
+	for name, args := range quiet {
+		if p.NeedsConfirm(name, args) {
+			t.Errorf("%s %v: want no confirmation", name, args)
+		}
+	}
+	if Desktop(Limits{}, false, nil).NeedsConfirm("some_new_tool", nil) {
+		t.Error("confirmations off: nothing asks")
+	}
+}

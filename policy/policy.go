@@ -42,15 +42,66 @@ var Risky = []string{
 	// Opening a bus: the UART drives TX into the DUT, CAN joins the bus and sets the 120 ohm
 	// termination, the pod as I2C master drives SCL and SDA (and may switch pull-ups on).
 	"uart_open", "can_open", "i2c_open",
-	// Emulated sensors drive LA pins (I2C, SPI, UART, data-ready) and can load the emulation image.
-	"sensor_start", "sensor_fault", "sensor_stimulus_start",
+	// Emulated sensors drive LA pins (I2C, SPI, UART, data-ready) and can load the emulation image,
+	// and their values and stimuli change what the DUT reads.
+	"sensor_start", "sensor_fault", "sensor_stimulus_start", "sensor_set", "sensor_stimulus_load",
+	// Pins and motion: la_dir changes which pins the pod may drive, la_step pulses a pin (a stepper).
+	"la_dir", "la_step",
+	// AI Vision: pressing or tapping moves a physical actuator; connecting picks a host and sends
+	// the board's token; calibrating and references change what later checks compare against.
+	"vision_press", "vision_tap", "vision_connect", "vision_calibrate", "vision_add_reference",
+	// Writes a file on this computer.
+	"save_capture_as_recording",
+}
+
+// Harmless are tools that change something but need no yes: they stop or close what the user
+// started (the pod's safe state), type on the console the user opened, or only look through the
+// camera. Every tool in neither ReadOnly nor Harmless asks, so a tool the MCP server adds later
+// asks until it is classified here.
+var Harmless = []string{
+	"dac_stop", "can_close", "i2c_close", "uart_close", "gpio_release", "sensor_stop",
+	"sensor_stimulus_stop", "sensor_fault_clear", "power_profile_stop", "vision_disconnect",
+	"uart_write", "loop_input", "adc_range", "power_profile_start",
+	"vision_status", "vision_look", "vision_ocr", "vision_find", "vision_compare", "vision_wait_for",
+	"vision_screen_health", "vision_cloud_boards",
 }
 
 // ConfirmArgs says whether a call that is not in Risky still needs the user's yes because of its
 // arguments: a capture that drives the bus (DrivesBus), or an I2C transfer that writes to the
 // device (I2CWrites). Hosts set it as the policy's ConfirmIf.
+//
+// It also asks for every tool this package does not classify (in none of Risky, ReadOnly and
+// Harmless), and for spi_flash_read with a file (it writes that file on this computer).
 func ConfirmArgs(name string, args map[string]any) bool {
-	return DrivesBus(name, args) || I2CWrites(name, args)
+	if !known(name) {
+		return true
+	}
+	return DrivesBus(name, args) || I2CWrites(name, args) || WritesHostFile(name, args)
+}
+
+// known says whether this package classifies the tool.
+func known(name string) bool {
+	return containsName(Risky, name) || containsName(ReadOnly, name) || containsName(Harmless, name) ||
+		name == "i2c_transfer" || name == "connect" || name == "disconnect"
+}
+
+// WritesHostFile says whether a read writes its result to a file on the machine running the MCP
+// server: spi_flash_read with a file.
+func WritesHostFile(name string, args map[string]any) bool {
+	if name != "spi_flash_read" {
+		return false
+	}
+	f, _ := args["file"].(string)
+	return strings.TrimSpace(f) != ""
+}
+
+func containsName(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // I2CWrites says whether an i2c_transfer changes the device: it writes data. A probe (nothing
