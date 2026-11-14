@@ -278,9 +278,40 @@ func TestBusDrivingCallsAreConfirmed(t *testing.T) {
 		name string
 		pol  agent.Policy
 	}{{"desktop", Desktop(Limits{}, true, nil)}, {"pod", Pod(Limits{})}} {
-		for _, tool := range []string{"i2c_open", "i2c_transfer", "i2c_scan"} {
+		// Opening a bus asks: the pod starts driving the DUT's pins (CAN: the termination too).
+		for _, tool := range []string{"i2c_open", "uart_open", "can_open", "sensor_start", "power_on", "generate", "dac_output"} {
 			if !p.pol.NeedsConfirm(tool, nil) {
 				t.Errorf("%s: %s should need a confirmation", p.name, tool)
+			}
+		}
+		// Reads on an open I2C session do not, so a device view's "Read all" runs as one batch.
+		for _, args := range []map[string]any{
+			nil,
+			{"addr": 118.0, "read": 1.0}, // a plain read
+			{"addr": 118.0},              // a probe
+			{"addr": 118.0, "write_hex": "d0", "read": 1.0},   // a register read
+			{"addr": 0x50, "write_hex": "00 10", "read": 16},  // a 16-bit register address
+			{"addr": 118.0, "write_hex": "0xF7", "read": 8.0}, // 0x prefix
+			{"addr": 118.0, "write_hex": "", "read": 2.0},     // empty write
+		} {
+			if p.pol.NeedsConfirm("i2c_transfer", args) {
+				t.Errorf("%s: i2c_transfer %v only reads and should not need a confirmation", p.name, args)
+			}
+		}
+		if p.pol.NeedsConfirm("i2c_scan", nil) {
+			t.Errorf("%s: i2c_scan on an open session should not need a confirmation", p.name)
+		}
+		// Writes do.
+		for _, args := range []map[string]any{
+			{"addr": 118.0, "write_hex": "f4 27"},                 // a register write
+			{"addr": 118.0, "write_hex": "e0", "read": 0.0},       // a command byte (reset, measure)
+			{"addr": 118.0, "write_hex": "f4 27 00", "read": 1.0}, // data before the read
+			{"addr": 118.0, "write_hex": "d", "read": 1.0},        // odd hex: unreadable counts as a write
+			{"addr": 118.0, "write_hex": 7, "read": 1.0},          // not a string
+			{"addr": 118.0, "write_hex": "d0", "read": "x"},       // unreadable read
+		} {
+			if !p.pol.NeedsConfirm("i2c_transfer", args) {
+				t.Errorf("%s: i2c_transfer %v writes and should need a confirmation", p.name, args)
 			}
 		}
 		if p.pol.NeedsConfirm("capture_la", map[string]any{"samples": 4096}) {

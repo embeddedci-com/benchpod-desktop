@@ -9,8 +9,8 @@ import { fakePod, type FakePod } from '@bpui/sensors/fakePod'
 import { fromBase64, loadEngine, MemorySensorStore, setEngineSource, type Engine } from '@bpui/sensors'
 import type { BenchCall } from '@bpui'
 import type { AppState } from './api'
-import { localFiles, localSensorPod, localSensorStore } from './sensors'
-import { pinsFromWiring, SensorsView } from './SensorsView'
+import { localFiles, localSensorPod, localSensorStore, setSensorConfirm } from './sensors'
+import { pinsFromWiring, SensorsView, startSummary } from './SensorsView'
 
 let engine: Engine
 beforeAll(async () => {
@@ -127,6 +127,35 @@ describe('localSensorPod', () => {
     expect((await localSensorPod.status()).instances).toEqual([])
     await expect(localSensorPod.set('bmp', { t: 1 })).rejects.toThrow('no instance bmp')
     expect(fetch.mock.calls[0][0]).toBe('/api/sensors/command')
+  })
+
+  it('asks before a start the app wants a yes for, and sends it again confirmed', async () => {
+    const bodies: { command: Record<string, unknown>; confirmed: boolean }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_: string, init?: RequestInit) => {
+        const b = JSON.parse(String(init?.body))
+        bodies.push(b)
+        return b.confirmed ? reply(200, { reply: { ok: true } }) : reply(200, { confirm: true })
+      }),
+    )
+    const ask = vi.fn(async () => true)
+    setSensorConfirm(ask)
+    await localSensorPod.start('env', { pins: { sda: 2, scl: 1 }, address: '0x76', values: {} })
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(bodies.map((b) => b.confirmed)).toEqual([false, true])
+    setSensorConfirm(async () => false)
+    bodies.length = 0
+    await expect(localSensorPod.start('env', { pins: { sda: 2, scl: 1 }, address: '0x76', values: {} })).rejects.toThrow('declined')
+    expect(bodies.length).toBe(1)
+    setSensorConfirm(null)
+  })
+})
+
+describe('startSummary', () => {
+  it('names the sensor, its pins and address', () => {
+    expect(startSummary({ cmd: 'sensor_start', instance: 'env', pins: { sda: 2, scl: 1 }, address: '0x76' })).toBe('Start "env" on SDA LA2, SCL LA1, address 0x76.')
+    expect(startSummary({ instance: 'i', address: 0x40 })).toBe('Start "i", address 0x40.')
   })
 })
 

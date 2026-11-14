@@ -217,9 +217,11 @@ func (a *App) releasePod() {
 	a.connMu.Lock()
 	a.mu.Lock()
 	t := a.tools
-	a.tools, a.pod, a.mcpState = nil, podState{}, MCPStopped
+	a.tools, a.pod = nil, podState{}
+	a.setMCPState(MCPStopped, a.mcpErr)
 	a.mu.Unlock()
 	a.console.reset()
+	a.buses.reset()
 	if t != nil {
 		_ = t.Close()
 	}

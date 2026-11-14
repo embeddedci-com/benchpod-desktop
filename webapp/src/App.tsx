@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMediaQuery } from '@mantine/hooks'
 import { desktopSequenceStore } from './sequences'
 import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { BusDashboard, ChatView, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary, type SequenceStore } from '@bpui'
+import { BenchPanel, BusDashboard, ChatView, benchOutputs, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary, type PanelControls, type PanelTab, type SequenceStore } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -46,6 +47,11 @@ export function App() {
   const [connecting, setConnecting] = useState(false)
   const [findOpen, setFindOpen] = useState(false)
   const [view, setView] = useState<'agent' | 'sensors'>('agent')
+  // ChatView's own breakpoint: below it the bench panel is a drawer behind a button.
+  const wide = useMediaQuery('(min-width: 48em)', true, { getInitialValueInEffect: false })
+  // The bench panel's tab when it has the page to itself (narrow window, no model).
+  const [benchTab, setBenchTab] = useState('captures')
+  const [benchSelected, setBenchSelected] = useState<string | undefined>()
   const chat = useChat({ base: '/api/chat' })
   const tools = useTools('/api/chat')
   // The bench controls beside the chat: the same tools as the agent, through the same policy.
@@ -88,11 +94,24 @@ export function App() {
   }, [refresh])
   // The pod connects on the first tool call, the agent's or a bench control's: follow it, quickly
   // while the agent runs.
+  // The BenchPod tools install or start in the background: poll every second while they do, so
+  // the badge says when they are ready or failed. A window coming back to the front (the desktop
+  // webview may hold timers while it is hidden) checks at once.
+  const mcpBusy = state?.mcp.state === 'installing' || state?.mcp.state === 'starting'
   useEffect(() => {
     void refresh()
-    const t = setInterval(() => void refresh(), chat.running ? 2000 : 5000)
-    return () => clearInterval(t)
-  }, [chat.running, refresh])
+    const t = setInterval(() => void refresh(), chat.running || mcpBusy ? 1000 : 5000)
+    const now = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    document.addEventListener('visibilitychange', now)
+    window.addEventListener('focus', now)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', now)
+      window.removeEventListener('focus', now)
+    }
+  }, [chat.running, mcpBusy, refresh])
 
   // Once the pod is connected, say in the header when a newer firmware release is out.
   const podConnected = !!state?.pod.connected
@@ -125,21 +144,58 @@ export function App() {
     }
   }
 
+  const busySecs = state.mcp.since ? Math.max(0, Math.round((Date.now() - Date.parse(state.mcp.since)) / 1000)) : 0
+  const busyFor = busySecs >= 10 ? ` ${Math.floor(busySecs / 60)}:${String(busySecs % 60).padStart(2, '0')}` : ''
   const podBadge = state.pod.connected ? (
     <Badge color="green" variant="light">
       pod connected{state.pod.connection ? ` · ${state.pod.connection}` : ''}
     </Badge>
   ) : state.mcp.state === 'installing' || state.mcp.state === 'starting' || connecting ? (
     <Badge color="blue" variant="light" leftSection={<Loader size={10} />}>
-      {state.mcp.state === 'installing' ? 'installing the BenchPod tools…' : connecting ? 'connecting…' : 'starting the BenchPod tools…'}
+      {state.mcp.state === 'installing' ? `installing the BenchPod tools…${busyFor}` : connecting ? 'connecting…' : `starting the BenchPod tools…${busyFor}`}
     </Badge>
+  ) : state.mcp.state === 'failed' && !state.pod.error ? (
+    <Tooltip label={state.mcp.error || 'The BenchPod tools did not start'} multiline w={360}>
+      <Badge color="red" variant="light" style={{ cursor: 'pointer' }} onClick={() => setFindOpen(true)}>
+        BenchPod tools failed · retry
+      </Badge>
+    </Tooltip>
   ) : (
     <Tooltip label={state.pod.error || state.mcp.error || 'Connects on the first tool call, or click to connect now'} multiline w={320}>
       <Badge color={state.pod.error || state.mcp.error ? 'red' : 'gray'} variant="light" style={{ cursor: 'pointer' }} onClick={() => (state.settings.pod_setup_done && !state.pod.error ? void connect() : setFindOpen(true))}>
-        {state.pod.error || state.mcp.error ? 'pod not connected · retry' : 'pod: connect'}
+        {state.pod.error || state.mcp.error ? 'pod not connected · retry' : state.mcp.state === 'ready' ? 'tools ready · connect the pod' : 'pod: connect'}
       </Badge>
     </Tooltip>
   )
+
+  const panelTabs: PanelTab[] = [
+    { value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> },
+    {
+      value: 'flash',
+      label: 'Flash',
+      content: (
+        <>
+          <FlashControls call={bench.call} firmware={firmware} />
+          <Divider mx="sm" label="SPI flash chip" labelPosition="left" />
+          <SpiFlashControls call={bench.call} images={firmware} dumpDir={state.data_dir} />
+        </>
+      ),
+    },
+    { value: 'wiring', label: 'Wiring', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
+  ]
+  const panelControls: PanelControls = {
+    captures: (
+      <BusDashboard
+        call={bench.call}
+        fetchCapture={fetchCapture}
+        refreshKey={agentCaptures}
+        renderConsole={(call) => <ConsoleTerminal call={call} logBase="/api/console" agentRunning={chat.running} />}
+        sequences={sequences ?? undefined}
+      />
+    ),
+    console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,
+    power: <PowerControls call={bench.call} />,
+  }
 
   const cost = chat.usage?.cost ? ` · $${chat.usage.cost.toFixed(4)} this message` : ''
   const footer = (
@@ -217,6 +273,28 @@ export function App() {
           </Box>
         ) : view === 'sensors' ? (
           <SensorsView state={state} call={bench.call} onUpdateFirmware={() => setSettingsOpen(true)} />
+        ) : setup && !wide ? (
+          // No model and a narrow window: the agent column would be empty and the bench panel a
+          // drawer behind a button, so the bench panel takes the page.
+          <Stack gap={0} h="100%">
+            <Text size="xs" c="dimmed" px="md" py={6} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+              AI is not configured: the bench controls work without it.{' '}
+              <Anchor size="xs" c="dimmed" underline="always" component="button" onClick={() => setSettingsOpen(true)}>
+                Add a model in Settings
+              </Anchor>
+            </Text>
+            <Box style={{ flex: 1, minHeight: 0 }} data-testid="bench-only">
+              <BenchPanel
+                outputs={benchOutputs(chat.items)}
+                tab={benchTab}
+                onTab={setBenchTab}
+                selected={benchSelected}
+                onSelect={setBenchSelected}
+                extraTabs={panelTabs}
+                controls={panelControls}
+              />
+            </Box>
+          </Stack>
         ) : (
           <ChatView
             items={chat.items}
@@ -250,34 +328,8 @@ export function App() {
             }
             footer={setup ? undefined : footer}
             panelInitialTab={setup ? 'captures' : undefined}
-            panelTabs={[
-              { value: 'generator', label: 'Generator', content: <GeneratorControls call={bench.call} library={library} /> },
-              {
-                value: 'flash',
-                label: 'Flash',
-                content: (
-                  <>
-                    <FlashControls call={bench.call} firmware={firmware} />
-                    <Divider mx="sm" label="SPI flash chip" labelPosition="left" />
-                    <SpiFlashControls call={bench.call} images={firmware} dumpDir={state.data_dir} />
-                  </>
-                ),
-              },
-              { value: 'wiring', label: 'Wiring', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
-            ]}
-            panelControls={{
-              captures: (
-                <BusDashboard
-                  call={bench.call}
-                  fetchCapture={fetchCapture}
-                  refreshKey={agentCaptures}
-                  renderConsole={(call) => <ConsoleTerminal call={call} logBase="/api/console" agentRunning={chat.running} />}
-                  sequences={sequences ?? undefined}
-                />
-              ),
-              console: <ConsoleTerminal call={bench.call} logBase="/api/console" agentRunning={chat.running} />,
-              power: <PowerControls call={bench.call} />,
-            }}
+            panelTabs={panelTabs}
+            panelControls={panelControls}
           />
         )}
       </Box>
