@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,10 +150,31 @@ func (a *App) saveConversation() {
 	}
 }
 
+// modelKey is the provider's key for st's endpoint. A hosted provider's key (OpenRouter, Anthropic,
+// OpenAI) goes only to that provider's own host over https: pointing the preset's base URL at
+// another server (a test endpoint, a typo, plain http) must not hand it the key. The key of a
+// custom or local endpoint is the user's for that endpoint.
+func (a *App) modelKey(st Settings) string {
+	key, _ := a.keys.Get(st.Provider)
+	if key == "" {
+		return ""
+	}
+	p, ok := providers.Get(st.Provider)
+	if !ok || p.Local || p.BaseURL == "" {
+		return key
+	}
+	want, err1 := url.Parse(p.BaseURL)
+	got, err2 := url.Parse(strings.TrimSpace(st.BaseURL))
+	if err1 != nil || err2 != nil || got.Scheme != "https" || !strings.EqualFold(got.Hostname(), want.Hostname()) {
+		return ""
+	}
+	return key
+}
+
 // buildAgent assembles the agent from the current settings.
 func (a *App) buildAgent() *agent.Agent {
 	st := a.store.Load()
-	key, _ := a.keys.Get(st.Provider)
+	key := a.modelKey(st)
 	model := &agent.OpenAICompatible{BaseURL: st.BaseURL, APIKey: key, Model: st.Model}
 	if st.Provider == "openrouter" {
 		model.Headers = map[string]string{"HTTP-Referer": "https://github.com/embeddedci-com/benchpod-desktop", "X-Title": "BenchPod Desktop"}
@@ -612,7 +634,7 @@ func (a *App) serveModels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	key, _ := a.keys.Get(st.Provider)
+	key := a.modelKey(st)
 	models, err := providers.List(r.Context(), st.BaseURL, key)
 	if err != nil {
 		http.Error(w, "could not list models: "+err.Error(), http.StatusBadGateway)
@@ -630,7 +652,7 @@ func (a *App) serveTestModel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	key, _ := a.keys.Get(st.Provider)
+	key := a.modelKey(st)
 	m := &agent.OpenAICompatible{BaseURL: st.BaseURL, APIKey: key, Model: st.Model}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()

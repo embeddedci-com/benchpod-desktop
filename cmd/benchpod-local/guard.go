@@ -20,15 +20,23 @@ import (
 //   - A change with a body under /api must say it is JSON (or, for a firmware upload, raw bytes):
 //     a browser sends a cross-site text/plain POST without asking first; application/json and
 //     application/octet-stream always need a preflight, which this server never grants.
-//   - No other site may frame the app, so it cannot be clickjacked.
+//   - A read under /api from another site is refused too (Sec-Fetch-Site cross-site or same-site,
+//     which covers another localhost port): some reads start the MCP server or download its
+//     installer, and a page's <img src> must not set that off.
+//   - No other site may frame the app, so it cannot be clickjacked, and the page runs only its own
+//     scripts (a content security policy), so an injected script has nothing to load.
 func guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Content-Security-Policy", "frame-ancestors 'self'")
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("X-Content-Type-Options", "nosniff")
 		if !allowedHost(r.Host) {
 			http.Error(w, "this server only answers requests addressed to localhost", http.StatusForbidden)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") && crossSite(r) {
+			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
 		if !safeMethod(r.Method) {
@@ -43,6 +51,23 @@ func guard(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// contentSecurityPolicy: the app's own scripts, styles (Mantine sets inline styles), images and
+// WebAssembly (the sensor engine), and connections back to this server only.
+const contentSecurityPolicy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; " +
+	"style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; " +
+	"connect-src 'self' ws: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; " +
+	"frame-ancestors 'self'"
+
+// crossSite says whether a browser marked the request as sent by another site. A request from the
+// app's own page is same-origin, a typed URL is none, and curl sends no header.
+func crossSite(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		return true
+	}
+	return false
 }
 
 func hasBody(r *http.Request) bool {

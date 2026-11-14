@@ -49,12 +49,12 @@ pub fn run() {
                     if is_local(url) {
                         return true;
                     }
-                    let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+                    open_external(url);
                     false
                 })
                 .on_new_window(|url, _features| {
                     // target="_blank" links (get a key, the docs): the system browser.
-                    let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+                    open_external(&url);
                     NewWindowResponse::Deny
                 })
                 .build()?;
@@ -72,6 +72,14 @@ pub fn run() {
             stop_sidecar(handle);
         }
     });
+}
+
+/// Hands a link to the system: only web pages and mail. A file:, smb: or another app's scheme
+/// could open something on this computer, so those are dropped.
+fn open_external(url: &url::Url) {
+    if matches!(url.scheme(), "https" | "mailto") {
+        let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+    }
 }
 
 fn is_local(url: &url::Url) -> bool {
