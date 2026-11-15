@@ -29,6 +29,8 @@ concurrency:
 jobs:
   cask:
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    # TAP_GITHUB_TOKEN is a secret of the `release` environment (v* tags and main only).
+    environment: release
     runs-on: ubuntu-24.04
     steps:
       - name: Tag and version
