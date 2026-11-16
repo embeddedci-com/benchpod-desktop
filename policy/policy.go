@@ -37,6 +37,9 @@ var Risky = []string{
 	"dac_output", "current_out", "generate", "replay", "replay_waveform", "control_loop",
 	"analog_path", "set_pull", "set_la_voltage", "gpio_write", "gpio_pulse", "gpio_mode",
 	"set_wiring", "fpga_image", "calibrate", "calibrate_dac", "calibrate_adc_gain",
+	// Wiring profiles stored on the pod: saving, the default and deleting change what every tool
+	// and person uses; loading one sends its pin directions (la_dir) to the pod.
+	"save_wiring", "load_wiring", "set_default_wiring", "delete_wiring",
 	"lan_tls", "usb_network", "command",
 	"can_write", "can_respond", "spi_transfer",
 	// Opening a bus: the UART drives TX into the DUT, CAN joins the bus and sets the 120 ohm
