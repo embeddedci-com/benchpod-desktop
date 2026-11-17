@@ -77,13 +77,16 @@ The panel beside the chat drives the pod by hand, without the agent:
   Below it, **SPI flash chip**: identify, program (erase, write, verify) and read back a 25-series
   SPI NOR flash on the wiring's SPI pins, optionally holding the board in reset. A read of up to
   4 KB shows as hex; a longer one is saved as a file in the data folder.
-- **Wiring**: which board signal is on which LA channel (UART, I2C, SWD and SPI roles, and named
-  signals), the target power rail, the I/O voltage, the UART baud and the OpenOCD target for
-  flashing, with each channel's pull resistor and any conflict. Pin directions: which way each wired
-  board signal goes (board output, board input or bidirectional), with each role's and signal's
-  default shown. Saving sends them to the pod (firmware 3.10.4+), which then never drives a board
-  output with a push-pull driver. Every control and the agent read it. It is kept on this computer, in `wiring.json` in the data folder; a profile the agent saves
-  with `set_wiring` lands there too.
+- **Pins**: the wiring profiles stored on the pod and the 14 LA pins of the one on screen, colored
+  by what each carries, with a red dot for a pull-up that is on and an indigo dot for a pull-down.
+  Click a pin to set what it is used for (a UART, I2C, SWD or SPI line, or a signal you name), what
+  the pod does with a signal (reads it, drives it, or both ways open drain), its pull resistor, and
+  its protocol's settings (the UART baud, the OpenOCD target). The I/O voltage and the power rail
+  sit above the pins. **Make active** makes a profile the pod's default: powering the board on uses
+  it (its I/O voltage, then its pull resistors, then the rail), and so does every tool that names
+  no profile. The pod never drives a board output with a push-pull driver: which way each pin goes
+  follows from what it is used for (firmware 3.10.4+). Firmware without stored profiles keeps the
+  wiring on this computer, in `wiring.json` in the data folder.
 - **Power**: switch the internal 5 V rail or the external rail on and off, and read the voltage
   and the current the board draws, live, with the last minute as a chart.
 

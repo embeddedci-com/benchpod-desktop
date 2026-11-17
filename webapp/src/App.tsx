@@ -181,7 +181,7 @@ export function App() {
         </>
       ),
     },
-    { value: 'wiring', label: 'Wiring', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
+    { value: 'wiring', label: 'Pins', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },
   ]
   const panelControls: PanelControls = {
     captures: (

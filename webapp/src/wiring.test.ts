@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { directionsNote } from './WiringTab'
+import { directionsNote, profileToSave } from './WiringTab'
 
 describe('directionsNote', () => {
   it('says nothing when the directions went out or the firmware has no la_dir', () => {
@@ -11,5 +11,18 @@ describe('directionsNote', () => {
   it('says why when a driven pin kept them from going out', () => {
     const note = directionsNote('not sent: direction conflict: LA9 is driven by gpio output')
     expect(note).toBe('Saved, but the pin directions were not sent: direction conflict: LA9 is driven by gpio output. Release that pin, then save again.')
+  })
+})
+
+describe('profileToSave', () => {
+  it('writes the editor keys, pulls included, and leaves out what is not set', async () => {
+    const { effectiveWiring } = await import('@bpui')
+    const draft = { version: 2, uart_rx: 5, pulls: [1], loop_input_unit: 'mA' }
+    const out = profileToSave(draft, effectiveWiring(draft))
+    expect(out).toMatchObject({ version: 2, uart_rx: 5, uart_tx: null, pulls: [1], loop_input_unit: 'mA' })
+    expect('la_mv' in out).toBe(false)
+    expect('dut_dirs' in out).toBe(false)
+    const none = profileToSave({ version: 2 }, effectiveWiring({ version: 2 }))
+    expect('pulls' in none).toBe(false)
   })
 })
