@@ -1,6 +1,20 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Button, Loader, Stack, Text } from '@mantine/core'
-import { WiringEditor, WiringProfilePicker, benchData, benchError, type BenchCall, type WiringProfileItem } from '@bpui'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Alert, Button, Group, Loader, Menu, Stack, Text } from '@mantine/core'
+import {
+  PinsEditor,
+  WiringDiagram,
+  WiringProfilePicker,
+  benchData,
+  benchError,
+  changedChannels,
+  effectiveWiring,
+  validateWiring,
+  wiringFieldErrors,
+  type BenchCall,
+  type NewProfileFrom,
+  type Wiring,
+  type WiringProfileItem,
+} from '@bpui'
 
 type WiringResult = {
   source: string
@@ -21,40 +35,50 @@ export function directionsNote(directions: string | null | undefined): string | 
   return `Saved, but the pin directions were ${directions}. Release that pin, then save again.`
 }
 
-const SOURCES: Record<string, string> = {
-  pod: 'stored on the pod',
-  file: 'this computer',
-  server: 'embeddedci.com (this pod is registered there)',
-  dict: 'set in this session, not saved',
-  preset: 'the reference bench preset',
-  undefined: 'nothing wired yet',
-  defaults: 'the defaults: nothing saved yet',
+/** The profile keys the Pins editor writes, as stored: what is not set is left out. */
+export function profileToSave(draft: Record<string, unknown>, w: Wiring): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...draft, version: 2 }
+  for (const k of ['la_mv', 'efuse', 'uart_rx', 'uart_tx', 'uart_baud', 'i2c_sda', 'i2c_scl', 'i2c_addr', 'swd_swclk', 'swd_swdio', 'swd_nreset', 'swd_target', 'spi_sclk', 'spi_mosi', 'spi_miso', 'spi_cs', 'signals', 'dut_dirs', 'pulls'] as const)
+    out[k] = w[k]
+  for (const k of ['la_mv', 'efuse', 'i2c_addr'] as const) if (!out[k]) delete out[k]
+  if (out.pulls === null) delete out.pulls
+  if (out.dut_dirs && Object.keys(out.dut_dirs as object).length === 0) delete out.dut_dirs
+  return out
 }
 
 /**
- * The Wiring tab: the wiring profiles stored on the pod (current firmware), the diagram, and the
- * editor. Picking a profile switches this session to it (load_wiring); saving stores it on the pod
- * (save_wiring), where the web app, CI and the agent see it too. The I/O voltage is set when the
- * board is powered on with the profile (the Power tab), not here. Older firmware keeps one profile:
- * saving applies it to the session (set_wiring), as before.
+ * The Pins tab: the wiring profiles stored on the pod and the pins of the one on screen. Picking a
+ * profile switches this session to it (load_wiring); Make active makes it the pod's default (what
+ * powering the board on uses); saving stores it on the pod (save_wiring), where the web app, CI and
+ * the agent see it too. Older firmware keeps one profile: saving applies it to the session
+ * (set_wiring) and keeps it on this computer.
  */
 export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: unknown }) {
   const [w, setW] = useState<WiringResult | null>(null)
   const [error, setError] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
   const [newName, setNewName] = useState<string | null>(null)
+  const [draft, setDraft] = useState<Record<string, unknown>>({})
+  const [saved, setSaved] = useState(false)
+  const [diagram, setDiagram] = useState(false)
 
   const load = useCallback(async () => {
     const r = await call('wiring', {}, { poll: true })
     const d = benchData<WiringResult>(r)
     if (d) {
       setW(d)
+      setDraft(d.profile)
       setError(undefined)
     } else setError(benchError(r))
   }, [call])
   useEffect(() => {
     void load()
   }, [load, refreshKey])
+
+  const wiring = useMemo(() => effectiveWiring(draft), [draft])
+  const issues = useMemo(() => validateWiring(draft), [draft])
+  const fieldErr = useMemo(() => wiringFieldErrors(wiring, issues.errors), [wiring, issues])
+  const changed = useMemo(() => (w ? changedChannels(wiring, effectiveWiring(w.profile)) : new Set<number>()), [wiring, w])
 
   if (!w)
     return (
@@ -77,6 +101,7 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
   const stored = Array.isArray(w.profiles) && (w.profiles.length > 0 || w.source === 'pod')
   const items: WiringProfileItem[] = (w.profiles ?? []).map((p) => ({ name: p.name, rev: p.rev, isDefault: p.name === w.default_profile }))
   const selected = newName ?? (w.profile_name || null)
+  const dirty = newName != null || JSON.stringify(draft) !== JSON.stringify(w.profile)
 
   const run = async (tool: string, args: Record<string, unknown>) => {
     setBusy(true)
@@ -92,67 +117,131 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
     }
   }
 
-  const save = async (profile: Record<string, unknown>) => {
+  const save = async () => {
+    setError(undefined)
+    setSaved(false)
+    const profile = profileToSave(draft, wiring)
+    let e: string | undefined
     if (!stored) {
-      const r = await call('set_wiring', { profile })
-      if (r.declined) return 'Not saved: you declined it.'
-      const e = benchError(r)
-      if (e) return e
-      await load()
-      return directionsNote(benchData<WiringResult>(r)?.directions)
+      setBusy(true)
+      try {
+        const r = await call('set_wiring', { profile })
+        e = r.declined ? 'Not saved: you declined it.' : benchError(r)
+        if (!e) {
+          await load()
+          e = directionsNote(benchData<WiringResult>(r)?.directions)
+        }
+      } finally {
+        setBusy(false)
+      }
+    } else {
+      e = await run('save_wiring', { profile, ...(selected ? { name: selected } : {}) })
+      if (!e) setNewName(null)
     }
-    const e = await run('save_wiring', { profile, ...(selected ? { name: selected } : {}) })
-    if (!e) setNewName(null)
-    return e
+    if (e) setError(e)
+    else setSaved(true)
   }
 
   const pick = async (name: string) => {
     setNewName(null)
+    setSaved(false)
     const e = await run('load_wiring', { name })
     if (e) setError(e)
   }
 
+  const create = (name: string, from: NewProfileFrom) => {
+    setNewName(name)
+    setSaved(false)
+    if (from === 'empty') setDraft({ version: 2 })
+  }
+
+  const menu = (
+    <>
+      <Menu.Item onClick={() => void navigator.clipboard?.writeText(JSON.stringify(profileToSave(draft, wiring), null, 2))}>Copy as JSON</Menu.Item>
+      <Menu.Item onClick={() => setDiagram((d) => !d)}>{diagram ? 'Hide the diagram' : 'Show the diagram'}</Menu.Item>
+    </>
+  )
+
   return (
-    <Stack gap="xs">
+    <Stack gap="sm" p="sm">
       {stored ? (
-        <Stack p="sm" pb={0} gap={4}>
-          <WiringProfilePicker
-            profiles={newName ? [...items, { name: newName, rev: 0, isDefault: false }] : items}
-            selected={selected}
-            onSelect={(n) => void pick(n)}
-            onMakeDefault={(n) => void run('set_default_wiring', { name: n }).then((e) => e && setError(e))}
-            onDelete={(n) => void run('delete_wiring', { name: n }).then((e) => e && setError(e))}
-            onCreate={(n) => setNewName(n)}
-            busy={busy}
-          />
-          {newName ? (
-            <Text size="xs" c="dimmed">
-              New profile {newName}: it starts as a copy of the wiring below. Change it and save to store it on the pod.
-            </Text>
-          ) : null}
-          {error ? (
-            <Text size="xs" c="red">
-              {error}
-            </Text>
-          ) : null}
-        </Stack>
-      ) : null}
-      <WiringEditor
-        profile={w.profile}
-        source={SOURCES[w.source] ?? w.source}
-        onSave={save}
-        title={selected ?? undefined}
-        saveLabel={stored ? (newName ? `Save as ${newName}` : 'Save to the pod') : 'Save wiring'}
-        note={
+        <WiringProfilePicker
+          profiles={newName ? [...items, { name: newName, rev: 0, isDefault: false }] : items}
+          selected={selected}
+          onSelect={(n) => void pick(n)}
+          onMakeDefault={(n) => void run('set_default_wiring', { name: n }).then((e) => e && setError(e))}
+          onDelete={(n) => void run('delete_wiring', { name: n }).then((e) => e && setError(e))}
+          onCreate={create}
+          menu={menu}
+          busy={busy}
+        />
+      ) : (
+        <Group justify="space-between" gap="xs">
           <Text size="xs" c="dimmed">
-            Which board signal is on which LA channel, and which way each one goes. The console, captures, decoding, flashing and
-            the agent all read it, and the pod never drives against a board output.{' '}
-            {stored
-              ? 'Profiles are stored on the pod: the web app, CI and the agent see the same ones. Powering the board on sets the profile’s I/O voltage.'
-              : 'It is kept on this computer (this pod’s firmware stores no profiles; update it to keep them on the pod).'}
+            This pod&apos;s firmware stores no profiles: the wiring is kept on this computer. Update the firmware to keep profiles on the pod.
           </Text>
-        }
+          <Menu position="bottom-end">
+            <Menu.Target>
+              <Button size="compact-xs" variant="subtle" color="gray" aria-label="More profile actions">
+                ⋯
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>{menu}</Menu.Dropdown>
+          </Menu>
+        </Group>
+      )}
+      {newName ? (
+        <Text size="xs" c="dimmed">
+          New profile {newName}: save it to store it on the pod.
+        </Text>
+      ) : null}
+
+      <PinsEditor
+        wiring={wiring}
+        onChange={(patch) => {
+          setSaved(false)
+          setDraft((d) => ({ ...d, ...patch }))
+        }}
+        errors={fieldErr}
+        warnings={issues.warnings}
+        disabled={busy}
       />
+
+      {diagram ? <WiringDiagram wiring={wiring} changed={changed} title={selected ?? undefined} /> : null}
+
+      {error ? (
+        <Alert color="red" variant="light" p="xs" withCloseButton onClose={() => setError(undefined)}>
+          <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>
+            {error}
+          </Text>
+        </Alert>
+      ) : null}
+      {issues.errors.length ? (
+        <Text size="xs" c="red">
+          {issues.errors.length === 1 ? issues.errors[0].message : `Fix the ${issues.errors.length} problems marked in red to save.`}
+        </Text>
+      ) : null}
+      <Group gap="xs">
+        <Button size="xs" onClick={() => void save()} loading={busy} disabled={!dirty || issues.errors.length > 0}>
+          {stored ? (newName ? `Save ${newName} to the pod` : 'Save to the pod') : 'Save'}
+        </Button>
+        <Button
+          size="xs"
+          variant="default"
+          onClick={() => {
+            setNewName(null)
+            setDraft(w.profile)
+          }}
+          disabled={!dirty || busy}
+        >
+          Undo changes
+        </Button>
+        {saved && !dirty ? (
+          <Text size="xs" c="teal">
+            Saved
+          </Text>
+        ) : null}
+      </Group>
     </Stack>
   )
 }

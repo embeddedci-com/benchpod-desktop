@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -296,9 +295,9 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	if st.Connection != "" {
 		args = append(args, "--connection", st.Connection)
 	}
-	if st.LAVoltage == 1.8 || st.LAVoltage == 3.3 {
-		args = append(args, "--la-voltage", strconv.FormatFloat(st.LAVoltage, 'f', 1, 64))
-	}
+	// No --la-voltage: the board's I/O voltage comes from the pod's wiring profile (la_mv), which the
+	// MCP server's connect and the pod itself (firmware 3.10.10+) apply. settings.la_voltage from an
+	// older app is ignored.
 	cmd := exec.Command(name, args...)
 	cmd.Stderr = a.mcpLog
 	cmd.Env = os.Environ()

@@ -26,7 +26,7 @@ type Settings struct {
 	// Connection is the pod: host[:port], "usb", "usb:<name>" or "embeddedci:<device>".
 	// Empty finds the one pod on the LAN.
 	Connection string  `json:"connection"`
-	LAVoltage  float64 `json:"la_voltage,omitempty"` // 1.8 or 3.3; 0 = keep the pod's
+	LAVoltage  float64 `json:"la_voltage,omitempty"` // ignored: the I/O voltage is in the wiring profile (older apps set it)
 
 	// ConfirmRisky asks before power, flash and output changes.
 	ConfirmRisky bool          `json:"confirm_risky"`
