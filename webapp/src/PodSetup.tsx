@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, Group, Loader, SegmentedControl, Stack, Text, TextInput } from '@mantine/core'
+import { Alert, Button, Group, Loader, Stack, Text, TextInput } from '@mantine/core'
 import { api, type AppState, type FoundPod } from './api'
 
 const KINDS: Record<string, string> = {
@@ -11,13 +11,13 @@ const KINDS: Record<string, string> = {
 
 /**
  * Find your pod: the first start, with no account. Looks on USB, then on the LAN (mDNS), shows the
- * pod it found, asks for the board's I/O voltage, and saves both. Nothing is registered anywhere.
+ * pod it found, and saves it. The board's I/O voltage is in the pod's wiring profile (the Pins tab).
+ * Nothing is registered anywhere.
  */
 export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppState) => void }) {
   const [finding, setFinding] = useState(false)
   const [found, setFound] = useState<FoundPod | null>(null)
   const [conn, setConn] = useState(state.settings.connection)
-  const [volts, setVolts] = useState<string>(state.settings.la_voltage ? String(state.settings.la_voltage) : '3.3')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | undefined>()
 
@@ -28,7 +28,6 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
     try {
       const f = await api.findPod(conn)
       setFound(f)
-      if (f.connected && f.la_voltage) setVolts(String(f.la_voltage))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -41,8 +40,8 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
     setSaving(true)
     setError(undefined)
     try {
-      // The app sets this voltage on the pod every time it connects (the MCP server's --la-voltage).
-      onDone(await api.saveSettings({ connection: found.connection, la_voltage: Number(volts), pod_setup_done: true }))
+      // The I/O voltage comes from the pod's wiring profile; la_voltage 0 clears an older app's override.
+      onDone(await api.saveSettings({ connection: found.connection, la_voltage: 0, pod_setup_done: true }))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -97,22 +96,10 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
               {found.ip ? ` · network address ${found.ip}` : ''}
             </Text>
           </Alert>
-          <div>
-            <Text size="sm" fw={500}>
-              Your board's I/O voltage
-            </Text>
-            <Text size="xs" c="dimmed" mb={4}>
-              The logic levels on the LA pins (UART, I2C, SWD). Most boards are 3.3 V; pick 1.8 V only when the board's I/O is 1.8 V.
-            </Text>
-            <SegmentedControl
-              value={volts}
-              onChange={setVolts}
-              data={[
-                { value: '3.3', label: '3.3 V' },
-                { value: '1.8', label: '1.8 V' },
-              ]}
-            />
-          </div>
+          <Text size="xs" c="dimmed">
+            Your board&apos;s I/O voltage (3.3 V or 1.8 V) is part of the wiring profile: set it once in the Pins tab, and the pod
+            uses it from then on.
+          </Text>
           <Group>
             <Button onClick={() => void use()} loading={saving}>
               Use this pod

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Anchor, Autocomplete, Button, Divider, Group, NumberInput, PasswordInput, SegmentedControl, Select, Stack, Switch, Text, Textarea, TextInput,
+  Alert, Anchor, Autocomplete, Button, Divider, Group, NumberInput, PasswordInput, Select, Stack, Switch, Text, Textarea, TextInput,
 } from '@mantine/core'
 import { api, type AppState, type ModelInfo, type Settings } from './api'
 
@@ -174,21 +174,6 @@ export function SettingsPanel({ state, onSaved }: { state: AppState; onSaved: (s
         value={s.connection}
         onChange={(e) => set({ connection: e.currentTarget.value })}
       />
-      <div>
-        <Text size="sm" fw={500} mb={4}>
-          Board I/O voltage
-        </Text>
-        <SegmentedControl
-          size="xs"
-          value={String(s.la_voltage ?? 0)}
-          onChange={(v) => set({ la_voltage: Number(v) })}
-          data={[
-            { value: '0', label: 'keep pod setting' },
-            { value: '1.8', label: '1.8 V' },
-            { value: '3.3', label: '3.3 V' },
-          ]}
-        />
-      </div>
       <Textarea
         label="About this board"
         description="Pinout, expected rails, firmware notes: the agent reads this before every answer."
