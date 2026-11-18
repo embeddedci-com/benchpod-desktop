@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { HelpTip } from '@bpui'
 import {
   Alert, Anchor, Autocomplete, Button, Divider, Group, NumberInput, PasswordInput, Select, Stack, Switch, Text, Textarea, TextInput,
 } from '@mantine/core'
@@ -212,7 +213,10 @@ export function SettingsPanel({ state, onSaved }: { state: AppState; onSaved: (s
         />
       </Group>
       <Text size="xs" c="dimmed">
-        Limits are checked by the app before each call, whatever the model asks for. 0 = only the pod's own range.
+        0 = only the pod&apos;s own range.{' '}
+        <HelpTip label="output limits" docs="/docs/benchpod-ai-agent">
+          The app checks these before each call, whatever the model asks for.
+        </HelpTip>
       </Text>
 
       {msg ? (

@@ -13,8 +13,7 @@ import {
   type BenchCall,
   type NewProfileFrom,
   type Wiring,
-  type WiringProfileItem,
-} from '@bpui'
+  type WiringProfileItem, HelpTip } from '@bpui'
 
 type WiringResult = {
   source: string
@@ -178,7 +177,10 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
       ) : (
         <Group justify="space-between" gap="xs">
           <Text size="xs" c="dimmed">
-            This pod&apos;s firmware stores no profiles: the wiring is kept on this computer. Update the firmware to keep profiles on the pod.
+            Older firmware: the pins are kept on this computer.{' '}
+            <HelpTip label="profiles on the pod" docs="/docs/benchpod-firmware-update">
+              Update the firmware to keep the profiles on the pod.
+            </HelpTip>
           </Text>
           <Menu position="bottom-end">
             <Menu.Target>

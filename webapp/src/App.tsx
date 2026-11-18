@@ -314,7 +314,7 @@ export function App() {
                 </Title>
                 {setup ? (
                   <Text size="sm" c="dimmed">
-                    AI is not configured. Capture, logic analyzer, generator, power, console and flash work without it, in the bench panel.{' '}
+                    AI is not configured: the bench panel works without it.{' '}
                     <Anchor size="sm" c="dimmed" underline="always" component="button" onClick={() => setSettingsOpen(true)}>
                       Add a model in Settings
                     </Anchor>

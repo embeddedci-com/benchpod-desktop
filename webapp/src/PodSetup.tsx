@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { HelpTip } from '@bpui'
 import { Alert, Button, Group, Loader, Stack, Text, TextInput } from '@mantine/core'
 import { api, type AppState, type FoundPod } from './api'
 
@@ -52,8 +53,10 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
   return (
     <Stack gap="sm">
       <Text size="sm" c="dimmed">
-        Plug the pod into this computer over USB-C, or into your network. No account and no registration: the app talks to the pod
-        directly.
+        Plug the pod into this computer over USB-C, or into your network.{' '}
+        <HelpTip label="no account needed" docs="/docs/benchpod-getting-started#1-plug-in-the-pod">
+          No account and no registration: the app talks to the pod directly.
+        </HelpTip>
       </Text>
       <Group gap="xs" align="flex-end">
         <TextInput
@@ -83,8 +86,10 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
             {found.error}
           </Text>
           <Text size="xs" c="dimmed" mt="xs">
-            Check the pod is powered and the USB cable carries data. On a network, mDNS does not cross routers: type the pod's address
-            instead.
+            Check the pod is powered and the USB cable carries data.{' '}
+            <HelpTip label="no pod found" docs="/docs/benchpod-troubleshooting">
+              On a network, discovery (mDNS) does not cross routers: type the pod&apos;s address instead.
+            </HelpTip>
           </Text>
         </Alert>
       ) : null}
@@ -97,8 +102,10 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
             </Text>
           </Alert>
           <Text size="xs" c="dimmed">
-            Your board&apos;s I/O voltage (3.3 V or 1.8 V) is part of the wiring profile: set it once in the Pins tab, and the pod
-            uses it from then on.
+            Set your board&apos;s I/O voltage in the Pins tab.{' '}
+            <HelpTip label="I/O voltage" docs="/docs/benchpod-getting-started#board-io-voltage">
+              3.3 V or 1.8 V, part of the pins profile: set it once and the pod uses it from then on.
+            </HelpTip>
           </Text>
           <Group>
             <Button onClick={() => void use()} loading={saving}>

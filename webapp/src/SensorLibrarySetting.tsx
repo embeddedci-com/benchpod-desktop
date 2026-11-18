@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { HelpTip } from '@bpui'
 import { Button, Group, Select, Stack, Text, TextInput } from '@mantine/core'
 import type { LibrarySettings } from '@bpui/sensors'
 import { localSensorStore } from './sensors'
@@ -62,7 +63,10 @@ export function SensorLibrarySetting({ offline }: { offline: boolean }) {
         )}
       </Group>
       <Text size="xs" c="dimmed">
-        The library of ready-made sensors in the Sensors view. Other versions download from GitHub once and stay cached{offline ? '; offline, only cached versions work' : ''}.
+        Ready-made sensors for the Sensors view.{offline ? ' Offline: only cached versions work.' : ''}{' '}
+        <HelpTip label="sensor library" docs="/docs/benchpod-sensors">
+          Other versions download from GitHub once and stay cached.
+        </HelpTip>
       </Text>
       {msg && (
         <Text size="xs" c={msg.color}>
