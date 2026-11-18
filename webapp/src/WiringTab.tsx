@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Group, Loader, Menu, Stack, Text } from '@mantine/core'
 import {
+  BoardViewModal,
   PinsEditor,
-  WiringDiagram,
   WiringProfilePicker,
   benchData,
   benchError,
-  changedChannels,
   effectiveWiring,
   validateWiring,
   wiringFieldErrors,
@@ -16,6 +15,8 @@ import {
   type WiringProfileItem, HelpTip } from '@bpui'
 
 type WiringResult = {
+  /** The pod's I/O header (embeddedci-mcp 3.0.2+): 'j1' or 'front'; null or absent when unknown. */
+  board_header?: 'j1' | 'front' | null
   source: string
   profile: Record<string, unknown>
   la_voltage: number | null
@@ -59,7 +60,7 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
   const [newName, setNewName] = useState<string | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const [saved, setSaved] = useState(false)
-  const [diagram, setDiagram] = useState(false)
+  const [visual, setVisual] = useState(false)
 
   const load = useCallback(async () => {
     const r = await call('wiring', {}, { poll: true })
@@ -77,7 +78,6 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
   const wiring = useMemo(() => effectiveWiring(draft), [draft])
   const issues = useMemo(() => validateWiring(draft), [draft])
   const fieldErr = useMemo(() => wiringFieldErrors(wiring, issues.errors), [wiring, issues])
-  const changed = useMemo(() => (w ? changedChannels(wiring, effectiveWiring(w.profile)) : new Set<number>()), [wiring, w])
 
   if (!w)
     return (
@@ -175,12 +175,25 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
   const menu = (
     <>
       <Menu.Item onClick={() => void navigator.clipboard?.writeText(JSON.stringify(profileToSave(draft, wiring), null, 2))}>Copy as JSON</Menu.Item>
-      <Menu.Item onClick={() => setDiagram((d) => !d)}>{diagram ? 'Hide the diagram' : 'Show the diagram'}</Menu.Item>
     </>
+  )
+
+  const visualize = (
+    <Button size="compact-xs" variant="default" onClick={() => setVisual(true)}>
+      Visualize
+    </Button>
   )
 
   return (
     <Stack gap="sm" p="sm">
+      <BoardViewModal
+        opened={visual}
+        onClose={() => setVisual(false)}
+        wiring={wiring}
+        title={selected ?? 'wiring'}
+        header={w.board_header ?? null}
+        storageKey="benchpod.boardHeader"
+      />
       {stored ? (
         <WiringProfilePicker
           profiles={newName ? [...items, { name: newName, rev: 0, isDefault: false }] : items}
@@ -190,6 +203,7 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
           onDelete={(n) => void remove(n)}
           onCreate={create}
           menu={menu}
+          actions={visualize}
           busy={busy}
         />
       ) : (
@@ -200,6 +214,8 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
               Update the firmware to keep the profiles on the pod.
             </HelpTip>
           </Text>
+          <Group gap={4} wrap="nowrap">
+          {visualize}
           <Menu position="bottom-end">
             <Menu.Target>
               <Button size="compact-xs" variant="subtle" color="gray" aria-label="More profile actions">
@@ -208,6 +224,7 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
             </Menu.Target>
             <Menu.Dropdown>{menu}</Menu.Dropdown>
           </Menu>
+          </Group>
         </Group>
       )}
       {newName ? (
@@ -226,8 +243,6 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
         warnings={issues.warnings}
         disabled={busy}
       />
-
-      {diagram ? <WiringDiagram wiring={wiring} changed={changed} title={selected ?? undefined} /> : null}
 
       {error ? (
         <Alert color="red" variant="light" p="xs" withCloseButton onClose={() => setError(undefined)}>
