@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMediaQuery } from '@mantine/hooks'
 import { desktopSequenceStore } from './sequences'
 import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { BenchPanel, BusDashboard, ChatView, benchOutputs, ConsoleTerminal, FlashControls, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary, type PanelControls, type PanelTab, type SequenceStore } from '@bpui'
+import { BenchPanel, BusDashboard, ChatView, benchOutputs, ConsoleTerminal, EspFlashControls, FlashControls, FlashModes, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary, type PanelControls, type PanelTab, type SequenceStore } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -174,11 +174,11 @@ export function App() {
       value: 'flash',
       label: 'Flash',
       content: (
-        <>
-          <FlashControls call={bench.call} firmware={firmware} />
-          <Divider mx="sm" label="SPI flash chip" labelPosition="left" />
-          <SpiFlashControls call={bench.call} images={firmware} dumpDir={state.data_dir} />
-        </>
+        <FlashModes
+          swd={<FlashControls call={bench.call} firmware={firmware} />}
+          spi={<SpiFlashControls call={bench.call} images={firmware} dumpDir={state.data_dir} />}
+          uart={<EspFlashControls call={bench.call} firmware={firmware} />}
+        />
       ),
     },
     { value: 'wiring', label: 'Pins', content: <WiringTab call={bench.call} refreshKey={agentWiring} /> },

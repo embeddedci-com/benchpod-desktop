@@ -102,10 +102,10 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
   const selected = newName ?? (w.profile_name || null)
   const dirty = newName != null || JSON.stringify(draft) !== JSON.stringify(w.profile)
 
-  const run = async (tool: string, args: Record<string, unknown>) => {
+  const run = async (tool: string, args: Record<string, unknown>, approved = false) => {
     setBusy(true)
     try {
-      const r = await call(tool, args)
+      const r = await call(tool, args, approved ? { approved: true } : undefined)
       if (r.declined) return 'Not done: you declined it.'
       const e = benchError(r)
       if (e) return e
@@ -148,6 +148,24 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
     if (e) setError(e)
   }
 
+  // Delete a profile. An unsaved new one is only dropped; after deleting the one on screen, the
+  // active profile is shown again (the session keeps no deleted profile).
+  const remove = async (name: string) => {
+    setError(undefined)
+    if (newName === name) {
+      setNewName(null)
+      setDraft(w.profile)
+      return
+    }
+    const e = await run('delete_wiring', { name })
+    if (e) return setError(e)
+    if (name === selected && w.default_profile && w.default_profile !== name) {
+      // Part of the delete the user said yes to: no second question.
+      const e2 = await run('load_wiring', { name: w.default_profile }, true)
+      if (e2) setError(e2)
+    }
+  }
+
   const create = (name: string, from: NewProfileFrom) => {
     setNewName(name)
     setSaved(false)
@@ -169,7 +187,7 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
           selected={selected}
           onSelect={(n) => void pick(n)}
           onMakeDefault={(n) => void run('set_default_wiring', { name: n }).then((e) => e && setError(e))}
-          onDelete={(n) => void run('delete_wiring', { name: n }).then((e) => e && setError(e))}
+          onDelete={(n) => void remove(n)}
           onCreate={create}
           menu={menu}
           busy={busy}
@@ -223,27 +241,29 @@ export function WiringTab({ call, refreshKey }: { call: BenchCall; refreshKey: u
           {issues.errors.length === 1 ? issues.errors[0].message : `Fix the ${issues.errors.length} problems marked in red to save.`}
         </Text>
       ) : null}
-      <Group gap="xs">
-        <Button size="xs" onClick={() => void save()} loading={busy} disabled={!dirty || issues.errors.length > 0}>
-          {stored ? (newName ? `Save ${newName} to the pod` : 'Save to the pod') : 'Save'}
-        </Button>
-        <Button
-          size="xs"
-          variant="default"
-          onClick={() => {
-            setNewName(null)
-            setDraft(w.profile)
-          }}
-          disabled={!dirty || busy}
-        >
-          Undo changes
-        </Button>
-        {saved && !dirty ? (
-          <Text size="xs" c="teal">
-            Saved
-          </Text>
-        ) : null}
-      </Group>
+      {/* The buttons show once there is an edit to save; "Saved" stays after a save. */}
+      {dirty || busy ? (
+        <Group gap="xs">
+          <Button size="xs" onClick={() => void save()} loading={busy} disabled={!dirty || issues.errors.length > 0}>
+            {stored ? (newName ? `Save ${newName} to the pod` : 'Save to the pod') : 'Save'}
+          </Button>
+          <Button
+            size="xs"
+            variant="default"
+            onClick={() => {
+              setNewName(null)
+              setDraft(w.profile)
+            }}
+            disabled={!dirty || busy}
+          >
+            Undo changes
+          </Button>
+        </Group>
+      ) : saved ? (
+        <Text size="xs" c="teal">
+          Saved
+        </Text>
+      ) : null}
     </Stack>
   )
 }
