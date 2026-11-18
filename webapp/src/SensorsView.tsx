@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Button, Group, Modal, Stack, Text } from '@mantine/core'
-import { benchData, benchError, effectiveWiring, laChannelLabel, type BenchCall, type Wiring } from '@bpui'
+import { benchData, benchError, effectiveWiring, laChannelLabel, type BenchCall, type Wiring, HelpTip } from '@bpui'
 import { SensorsPage, type BenchHooks, type SensorKind, type SensorPins } from '@bpui/sensors'
 import type { AppState } from './api'
 import { localFiles, localSensorPod, localSensorStore, setSensorConfirm } from './sensors'
@@ -86,8 +86,11 @@ export function SensorsView({ state, call, onUpdateFirmware }: { state: AppState
           <Stack gap="sm">
             <Text size="sm">{startSummary(asking)}</Text>
             <Text size="xs" c="dimmed">
-              The pod loads its sensor emulation image if another one runs (captures and the generator wait until the sensor stops) and
-              drives the pins the sensor uses. You can turn these questions off in Settings.
+              Captures and the generator wait until the sensor stops.{' '}
+              <HelpTip label="sensor emulation" docs="/docs/benchpod-sensors">
+                The pod loads its sensor emulation image if another one runs and drives the pins the sensor uses. Turn these
+                questions off in Settings.
+              </HelpTip>
             </Text>
             <Group justify="flex-end">
               <Button variant="default" onClick={() => reply(false)}>
