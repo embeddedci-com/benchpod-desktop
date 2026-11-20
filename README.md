@@ -102,7 +102,7 @@ drive otherwise, gets this update too (see [Pod firmware 4.0](#pod-firmware-40))
 **This pod** (in Settings, under Pod firmware): the pod's board, firmware, connection, network
 address and USB network adapter at a glance; Wi-Fi (show the network, scan, join, forget); network
 access on Ethernet and Wi-Fi (open, locked or off) and HTTPS-only; the USB network adapter on or
-off; the firmware signature policy (shown only: firmware 4.0 always requires signed images); and,
+off; the firmware signature policy (firmware 4.0 always requires signed images: only "required"); and,
 with offline mode off and `benchpod login` done, deregistering the pod from embeddedci.com. The
 bundled `benchpod` CLI does the settings no BenchPod tool covers: Wi-Fi and the signature policy
 as JSON over the pod's USB network adapter, network access and the USB network adapter over its

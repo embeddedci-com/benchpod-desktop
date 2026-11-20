@@ -17,7 +17,7 @@ import (
 )
 
 // The pod's own settings that no MCP tool covers: Wi-Fi, LAN access, the USB network adapter, the
-// signature policy (shown only: firmware 4.0 always requires signatures), deregistering. The
+// signature policy (firmware 4.0: required only), deregistering. The
 // bundled benchpod CLI (0.10) does them: the Wi-Fi and network commands and sig-policy as JSON over
 // the pod's USB network adapter, lan-policy and usb-network over its USB console. The Settings tab
 // runs it, only for this fixed list of commands, with the same
@@ -92,23 +92,40 @@ var podCLICommands = map[string]podCLICommand{
 	},
 	"clear-wifi": {argv: func(map[string]any) ([]string, error) { return []string{"clear-wifi"}, nil }, changes: always, timeout: time.Minute},
 	"lan-policy": setting("lan-policy", "open", "locked", "off"),
-	// Firmware 4.0 always requires signatures (BP0074): the CLI only shows the policy.
-	"sig-policy": setting("sig-policy"),
+	// Firmware 4.0 always requires signatures (BP0074): "required" is the only setting left.
+	"sig-policy": setting("sig-policy", "required"),
 	"usb-network": {
 		argv: func(args map[string]any) ([]string, error) {
-			v := str(args, "set")
-			if v == "" {
-				return []string{"usb-network", "show"}, nil
-			}
-			if err := oneOf(v, "on", "off"); err != nil {
-				return nil, err
+			v, err := usbNetworkSet(args)
+			if err != nil || v == "" {
+				return []string{"usb-network", "show"}, err
 			}
 			return []string{"usb-network", v}, nil
 		},
-		changes: func(args map[string]any) bool { return str(args, "set") != "" },
+		changes: func(args map[string]any) bool { v, err := usbNetworkSet(args); return err == nil && v != "" },
 		timeout: time.Minute,
 	},
 	"deregister": {argv: func(map[string]any) ([]string, error) { return []string{"deregister"}, nil }, changes: always, cloud: true, timeout: 2 * time.Minute},
+}
+
+// usbNetworkSet is the usb-network change the page asks for: {"enabled": true|false} (the
+// firmware 4.0 form, as the MCP tool's), or {"set": "on"|"off"}; "" reads the setting.
+func usbNetworkSet(args map[string]any) (string, error) {
+	if e, ok := args["enabled"]; ok && e != nil {
+		b, ok := e.(bool)
+		if !ok {
+			return "", errors.New("enabled is true or false")
+		}
+		if b {
+			return "on", nil
+		}
+		return "off", nil
+	}
+	v := str(args, "set")
+	if v == "" {
+		return "", nil
+	}
+	return v, oneOf(v, "on", "off")
 }
 
 // podCLILogArgs hides the Wi-Fi password from the action log.

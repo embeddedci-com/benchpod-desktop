@@ -99,10 +99,29 @@ func TestPodCLIExitCodes(t *testing.T) {
 			t.Errorf("exit %s: %+v", c.exit, r)
 		}
 	}
-	if r := app.runPodCLI(ctx, "sig-policy", toolRequest{Args: map[string]any{"set": "audit"}, Confirmed: true}); !r.Refused || !strings.Contains(r.Text, "BP0074") {
-		t.Errorf("sig-policy set: %+v", r)
+	if r := app.runPodCLI(ctx, "sig-policy", toolRequest{Args: map[string]any{"set": "audit"}, Confirmed: true}); !r.Refused {
+		t.Errorf("sig-policy set audit: %+v", r)
 	}
 	_ = os.WriteFile(code, []byte("0"), 0o600)
+	if r := app.runPodCLI(ctx, "sig-policy", toolRequest{Args: map[string]any{"set": "required"}, Confirmed: true}); r.IsError || !strings.Contains(r.Text, "argv: sig-policy set required") {
+		t.Errorf("sig-policy set required: %+v", r)
+	}
+	for _, c := range []struct {
+		args map[string]any
+		argv string
+	}{
+		{map[string]any{"enabled": false}, "argv: usb-network off"},
+		{map[string]any{"enabled": true}, "argv: usb-network on"},
+		{map[string]any{"set": "off"}, "argv: usb-network off"},
+		{map[string]any{}, "argv: usb-network show"},
+	} {
+		if r := app.runPodCLI(ctx, "usb-network", toolRequest{Args: c.args, Confirmed: true}); r.IsError || !strings.Contains(r.Text, c.argv) {
+			t.Errorf("usb-network %v: %+v", c.args, r)
+		}
+	}
+	if r := app.runPodCLI(ctx, "usb-network", toolRequest{Args: map[string]any{"enabled": "yes"}, Confirmed: true}); !r.Refused {
+		t.Errorf("usb-network enabled=yes: %+v", r)
+	}
 	if r := app.runPodCLI(ctx, "sig-policy", toolRequest{}); r.IsError || !strings.Contains(r.Text, "argv: sig-policy show") {
 		t.Errorf("sig-policy show: %+v", r)
 	}
