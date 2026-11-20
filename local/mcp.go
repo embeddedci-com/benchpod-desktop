@@ -25,7 +25,10 @@ import (
 // MCPSpec is the BenchPod MCP server the app runs: one exact embeddedci-mcp release per app
 // release (bump it with each release, to the version the Claude and Codex plugins pin), so a new
 // PyPI upload never reaches the app without a release of the app.
-const MCPSpec = "embeddedci-mcp==3.0.3"
+//
+// RELEASE PIN (firmware 4.0 cutover): 4.0.0 must be on PyPI before an app with it ships; until
+// then the app cannot install its tools. benchpod-cli v0.10.0 in release.yml goes with it.
+const MCPSpec = "embeddedci-mcp==4.0.0"
 
 // The private uv (step 4 below) is this uv release, from its GitHub release archive, checked
 // against the SHA-256 in uvArchives (the release's .sha256 files) before anything is unpacked.
