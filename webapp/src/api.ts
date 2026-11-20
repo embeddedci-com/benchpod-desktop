@@ -31,8 +31,25 @@ export type FoundPod = {
   compat?: PodCompat
 }
 
-/** Why the app cannot drive the pod it reached: firmware_too_old (3.x, the app offers the update) or app_too_old. */
-export type PodCompat = 'firmware_too_old' | 'app_too_old'
+/**
+ * Why the app cannot drive the pod it reached: firmware_too_old (3.x, the app offers the update),
+ * app_too_old, or not_paired (firmware 4.0.1+ over Ethernet or Wi-Fi: the app offers to pair this computer).
+ */
+export type PodCompat = 'firmware_too_old' | 'app_too_old' | 'not_paired'
+
+/** How this computer can pair with the pod (GET /api/pod/pairing): over USB, or through embeddedci.com when signed in. */
+export type PairingOptions = {
+  pod_name?: string
+  /** The connection to pair over the pod's USB-C cable: usb:<name>, or usb. */
+  usb: string
+  /** The account's pods on embeddedci.com (empty when not signed in or offline). */
+  cloud: { name: string; online: boolean; connection: string }[]
+  /** The pod the app knows by name, when it is among them. */
+  cloud_pick?: string
+  offline: boolean
+}
+
+export type PairResult = { ok: boolean; text: string; pod: AppState['pod'] }
 
 export type Preset = {
   id: string
@@ -93,6 +110,8 @@ export const api = {
   testModel: () => req<{ ok: boolean; message: string; ms: number }>('POST', '/api/test-model'),
   findPod: (connection: string) => req<FoundPod>('POST', '/api/pod/find', { connection }),
   connectPod: () => req<AppState['pod']>('POST', '/api/pod/connect'),
+  podPairing: () => req<PairingOptions>('GET', '/api/pod/pairing'),
+  pairPod: (connection: string) => req<PairResult>('POST', '/api/pod/pair', { connection }),
   mcpLog: () => req<{ lines: string[] }>('GET', '/api/mcp/log'),
   firmware: () => req<{ files: { name: string; path: string; size: number; modified: string }[] }>('GET', '/api/firmware'),
   uploadFirmware: async (file: File) => {

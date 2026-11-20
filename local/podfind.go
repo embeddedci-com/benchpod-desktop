@@ -30,7 +30,8 @@ type foundPod struct {
 	Error      string   `json:"error,omitempty"`
 	Tried      []string `json:"tried"`
 	// Compat: the pod answered but the app cannot drive it (firmware_too_old: firmware 3.x, which
-	// the app offers to update; app_too_old). Version is then the firmware it runs, when known.
+	// the app offers to update; app_too_old; not_paired, which the app offers to pair). Version is
+	// then the firmware it runs, when known.
 	Compat podCompat `json:"compat,omitempty"`
 }
 
@@ -90,7 +91,8 @@ func (a *App) findPod(ctx context.Context, conn string) foundPod {
 		if err != nil {
 			msg = err.Error()
 		} else if compat, fw := mcpCompat(res.Text); compat != compatOK {
-			// Found it, on firmware this app does not drive: the page offers the update.
+			// Found it, but the app cannot drive it: firmware 3.x (the page offers the update), or
+			// this computer is not paired with it (the page offers to pair).
 			out = foundPod{Connection: c, Version: fw, Compat: compat, Error: msg, Tried: out.Tried}
 			a.mu.Lock()
 			a.pod = podState{Connection: c, Error: msg, Compat: compat, Firmware: fw}

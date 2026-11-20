@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { HelpTip } from '@bpui'
 import { Alert, Button, Group, Loader, Stack, Text, TextInput } from '@mantine/core'
 import { api, type AppState, type FoundPod } from './api'
+import { PodPairing } from './PodPairing'
 
 const KINDS: Record<string, string> = {
   usb_net: 'USB (network adapter)',
@@ -38,6 +39,8 @@ export function PodSetup({ state, onDone, onUpdateFirmware }: { state: AppState;
 
   // Firmware 3.x: the pod answered, but the app drives firmware 4.0 or later. Save it and update it.
   const tooOld = found?.compat === 'firmware_too_old'
+  // Firmware 4.0.1 over the network: this computer is not paired with the pod. Pair it, then use it.
+  const notPaired = found?.compat === 'not_paired'
 
   const use = async () => {
     if (!found?.connected && !tooOld) return
@@ -100,6 +103,13 @@ export function PodSetup({ state, onDone, onUpdateFirmware }: { state: AppState;
             </Button>
           </Group>
         </Stack>
+      ) : notPaired ? (
+        <PodPairing
+          onPaired={(pod) => {
+            // Paired and connected: look again, for what the pod is.
+            if (pod.connected) void find()
+          }}
+        />
       ) : found && !found.connected ? (
         <Alert color="orange" variant="light" title="No pod found">
           <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
