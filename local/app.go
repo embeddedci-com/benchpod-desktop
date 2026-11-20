@@ -117,7 +117,8 @@ type podState struct {
 	Error      string          `json:"error,omitempty"`
 	Status     json.RawMessage `json:"status,omitempty"`
 	// Compat: why the app cannot drive the pod it reached (firmware_too_old: the pod runs
-	// firmware 3.x and the page offers the update; app_too_old), with the firmware it runs.
+	// firmware 3.x and the page offers the update; app_too_old; not_paired: this computer is not
+	// paired with the pod, and the page offers to pair it), with the firmware it runs.
 	Compat   podCompat `json:"compat,omitempty"`
 	Firmware string    `json:"firmware,omitempty"`
 }
@@ -512,6 +513,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/test-model", a.serveTestModel)
 	mux.HandleFunc("POST /api/pod/connect", a.servePodConnect)
 	mux.HandleFunc("POST /api/pod/find", a.servePodFind)
+	mux.HandleFunc("GET /api/pod/pairing", a.servePodPairing)
+	mux.HandleFunc("POST /api/pod/pair", a.servePodPair)
 	mux.HandleFunc("POST /api/tool/{name}", a.serveTool)
 	mux.HandleFunc("GET /api/console", a.serveConsole)
 	mux.HandleFunc("GET /api/bus/sessions", a.serveBusSessions)

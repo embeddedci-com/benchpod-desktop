@@ -210,6 +210,12 @@ No account and no registration: the app talks to the pod directly.
 
 A pod in the cloud (`embeddedci:<name>`, after `benchpod login`) goes in Settings → Connection.
 
+Firmware 4.0.1 and later take commands over Ethernet and Wi-Fi only from paired computers. When the
+pod refuses this one (`BP0081`), the header shows **pod not paired**: click it and press **Pair
+this computer** with the pod's USB-C cable plugged in, or **Pair through embeddedci.com** for a
+registered pod when you are signed in. The app runs the bundled CLI's `lan-clients add` and
+connects again. USB and embeddedci.com never need pairing.
+
 ## Offline use
 
 Turn on **Offline** at the top of Settings and the app keeps everything on your computer and

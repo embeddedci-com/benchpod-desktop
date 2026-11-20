@@ -207,9 +207,19 @@ func (a *App) runPodCLI(ctx context.Context, name string, req toolRequest) toolR
 		if ctx.Err() != nil {
 			res.Text = strings.TrimSpace(text + "\n(no answer within " + c.timeout.String() + ")")
 		}
-		// Exit 7: the pod runs firmware 3.x; exit 6: its firmware is newer than the bundled CLI.
-		if h := compatHint(cliCompat(cliExitCode(err))); h != "" {
+		// Exit 7: the pod runs firmware 3.x; exit 6: its firmware is newer than the bundled CLI;
+		// exit 3 with BP0081: this computer is not paired with the pod.
+		compat := cliCompat(cliExitCode(err), text)
+		if h := compatHint(compat); h != "" {
 			res.Text = strings.TrimSpace(res.Text + "\n" + h)
+		}
+		if compat == compatNotPaired {
+			// The header's pod badge then offers to pair (podpair.go).
+			a.mu.Lock()
+			if !a.pod.Connected {
+				a.pod.Compat, a.pod.Error = compatNotPaired, text
+			}
+			a.mu.Unlock()
 		}
 	}
 	if changes {

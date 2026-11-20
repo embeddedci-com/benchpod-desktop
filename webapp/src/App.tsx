@@ -7,6 +7,7 @@ import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
 import { PodSetup } from './PodSetup'
+import { PodPairing } from './PodPairing'
 import { SensorsView } from './SensorsView'
 import { SensorLibrarySetting } from './SensorLibrarySetting'
 
@@ -46,6 +47,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [findOpen, setFindOpen] = useState(false)
+  const [pairOpen, setPairOpen] = useState(false)
   const [view, setView] = useState<'agent' | 'sensors'>('agent')
   // ChatView's own breakpoint: below it the bench panel is a drawer behind a button.
   const wide = useMediaQuery('(min-width: 48em)', true, { getInitialValueInEffect: false })
@@ -150,6 +152,12 @@ export function App() {
     <Tooltip label={state.pod.error} multiline w={360}>
       <Badge color="orange" variant="light" style={{ cursor: 'pointer' }} onClick={() => setSettingsOpen(true)}>
         pod needs firmware 4.0 · update
+      </Badge>
+    </Tooltip>
+  ) : state.pod.compat === 'not_paired' ? (
+    <Tooltip label={state.pod.error} multiline w={360}>
+      <Badge color="orange" variant="light" style={{ cursor: 'pointer' }} onClick={() => setPairOpen(true)}>
+        pod not paired · pair
       </Badge>
     </Tooltip>
   ) : state.pod.compat === 'app_too_old' ? (
@@ -357,6 +365,15 @@ export function App() {
             setFindOpen(false)
           }}
           onUpdateFirmware={() => setSettingsOpen(true)}
+        />
+      </Modal>
+
+      <Modal opened={pairOpen} onClose={() => setPairOpen(false)} title="Pair this computer" size="lg">
+        <PodPairing
+          onPaired={(pod) => {
+            if (pod.connected) setPairOpen(false)
+            void refresh()
+          }}
         />
       </Modal>
 

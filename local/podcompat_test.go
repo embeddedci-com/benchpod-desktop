@@ -24,6 +24,15 @@ func TestMCPCompat(t *testing.T) {
 		{"FirmwareTooOldError: no version here", compatFirmwareTooOld, ""},
 		{"Error executing tool connect: ClientTooOldError: this BenchPod MCP server (embeddedci-mcp 4.0.0) is too old", compatAppTooOld, ""},
 		{"Error executing tool connect: TransportError: no pod on USB", compatOK, ""},
+		// Firmware 4.0.1 LAN pairing: embeddedci-mcp 4.0.1 raises PodNotPairedError (BP0081).
+		{"Error executing tool connect: PodNotPairedError: connect: BP0081: This computer is not paired with the pod: " +
+			"wiring_get needs pairing over USB or from the cloud; tell the user", compatNotPaired, ""},
+		{"PodNotPairedError: BP0081: This computer is not paired with the pod", compatNotPaired, ""},
+		// The code from a server whose SDK has no PodNotPairedError class yet.
+		{"Error executing tool connect: PodLockedError: connect: BP0081: not paired", compatNotPaired, ""},
+		// Another LAN refusal (the LAN policy) is not the unpaired computer.
+		{"Error executing tool connect: PodLockedError: connect: BP0040: the LAN is locked", compatOK, ""},
+		{"Error executing tool connect: PermissionError: the docs mention BP0081 and PodNotPairedError", compatOK, ""},
 		// Only the class decides: a message that mentions it is not one.
 		{"BP0009: the text says FirmwareTooOldError somewhere", compatOK, ""},
 	}
@@ -31,6 +40,33 @@ func TestMCPCompat(t *testing.T) {
 		got, fw := mcpCompat(c.text)
 		if got != c.compat || fw != c.fw {
 			t.Errorf("%q: %q %q, want %q %q", c.text, got, fw, c.compat, c.fw)
+		}
+	}
+}
+
+// TestCLICompat: the CLI's exit code decides; exit 3 (refused) is the unpaired computer only with
+// the stable code BP0081 in its output.
+func TestCLICompat(t *testing.T) {
+	notPaired := "show-network: the pod refused: BP0081: This computer is not paired with the pod: wifi_status needs " +
+		"pairing over USB or from the cloud; plug the pod into this computer's USB-C port and run `benchpod setup` once"
+	cases := []struct {
+		code int
+		out  string
+		want podCompat
+	}{
+		{cliExitRefused, notPaired, compatNotPaired},
+		{cliExitRefused, "show-network: the pod refused: BP0040: the LAN is locked", compatOK},
+		{cliExitRefused, "the pod refused: bad request", compatOK},
+		// The code alone, on another exit code, is not the refusal.
+		{cliExitUnreachable, notPaired, compatOK},
+		{1, notPaired, compatOK},
+		{cliExitUpdatePod, "", compatFirmwareTooOld},
+		{cliExitUpdateCLI, "", compatAppTooOld},
+		{0, "", compatOK},
+	}
+	for _, c := range cases {
+		if got := cliCompat(c.code, c.out); got != c.want {
+			t.Errorf("exit %d %q: %q, want %q", c.code, c.out, got, c.want)
 		}
 	}
 }
@@ -99,6 +135,16 @@ func TestPodCLIExitCodes(t *testing.T) {
 			t.Errorf("exit %s: %+v", c.exit, r)
 		}
 	}
+	// Exit 3 with BP0081: this computer is not paired; the pod badge offers to pair.
+	_ = os.WriteFile(code, []byte("3"), 0o600)
+	_ = os.WriteFile(cli, []byte("#!/bin/sh\necho \"show-network: the pod refused: BP0081: This computer is not paired with the pod\"\nexit $(cat "+code+")\n"), 0o755)
+	if r := app.runPodCLI(ctx, "show-network", toolRequest{}); !r.IsError || !strings.Contains(r.Text, "pod not paired") {
+		t.Errorf("not paired: %+v", r)
+	}
+	if app.pod.Compat != compatNotPaired {
+		t.Errorf("pod state: %+v", app.pod)
+	}
+	_ = os.WriteFile(cli, []byte("#!/bin/sh\necho \"argv: $*\"\nexit $(cat "+code+")\n"), 0o755)
 	if r := app.runPodCLI(ctx, "sig-policy", toolRequest{Args: map[string]any{"set": "audit"}, Confirmed: true}); !r.Refused {
 		t.Errorf("sig-policy set audit: %+v", r)
 	}
