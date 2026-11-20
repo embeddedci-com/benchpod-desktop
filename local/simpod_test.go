@@ -56,7 +56,7 @@ func TestFirstRunOnSimulatedPod(t *testing.T) {
 			delta = map[string]any{"content": "It booted."}
 		} else {
 			delta = map[string]any{"tool_calls": []any{map[string]any{"index": 0, "id": "c1", "function": map[string]any{
-				"name": "power_cycle_and_capture", "arguments": `{"until_regex":"APP_OK","duration":10}`}}}}
+				"name": "power_cycle_and_capture", "arguments": `{"until_regex":"APP_OK","duration_s":10}`}}}}
 		}
 		b, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"delta": delta}}})
 		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", b)

@@ -26,7 +26,7 @@ import (
 // images, the Wi-Fi bridge). The desktop app bundles the CLI next to benchpod-local; a CLI on PATH
 // does too. One implementation, the one `benchpod flash-self` users run.
 //
-//	GET    /api/pod/firmware                -> {running, gateware, latest, latest_error, cli, files, offline}
+//	GET    /api/pod/firmware                -> {running, gateware, latest, latest_error, cli, files, offline, compat}
 //	POST   /api/pod/firmware/files?name=    raw bytes: a release file for an update without internet
 //	DELETE /api/pod/firmware/files          forget them
 //	POST   /api/pod/firmware/update         {"confirmed": true, "version": "latest" | "v3.10.2"} or
@@ -106,11 +106,15 @@ func latestRelease(ctx context.Context) (string, error) {
 	return rel.TagName, nil
 }
 
-// runningFirmware is the pod's firmware and gateware version from the last status.
+// runningFirmware is the pod's firmware and gateware version from the last status, or the
+// firmware the MCP server named when it refused the pod (firmware 3.x).
 func (a *App) runningFirmware() (version string, gateware int) {
 	a.mu.Lock()
-	raw := a.pod.Status
+	raw, refused := a.pod.Status, a.pod.Firmware
 	a.mu.Unlock()
+	if len(raw) == 0 {
+		return refused, 0
+	}
 	var st struct {
 		Firmware struct {
 			Version  string `json:"version"`
@@ -126,6 +130,12 @@ func (a *App) servePodFirmware(w http.ResponseWriter, r *http.Request) {
 	offline := a.offline(st)
 	running, gw := a.runningFirmware()
 	out := map[string]any{"running": running, "gateware": gw, "offline": offline, "files": a.podFirmwareFiles()}
+	a.mu.Lock()
+	if c := a.pod.Compat; c != compatOK {
+		// firmware_too_old: the pod answered on firmware 3.x, which only takes this update.
+		out["compat"] = c
+	}
+	a.mu.Unlock()
 	if p, err := a.cliCommand(); err == nil {
 		out["cli"] = p
 	} else {

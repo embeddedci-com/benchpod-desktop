@@ -88,6 +88,9 @@ const WIRING = { version: 1, la_mv: 3300, i2c_sda: 1, i2c_scl: 2, signals: [] }
 function benchCall() {
   return vi.fn<BenchCall>(async (tool) => {
     if (tool === 'wiring') return { text: '', structured: { source: 'file', profile: WIRING, la_voltage: 3.3 } }
+    // MCP 4.0: every channel's state and the directions its resistor pulls.
+    if (tool === 'pull_status')
+      return { text: '', structured: { channels: Array.from({ length: 14 }, (_, i) => ({ la: i + 1, state: 'off', supported: i < 6 ? ['up'] : [] })) } }
     return { text: '{}', structured: {} }
   })
 }
@@ -222,7 +225,7 @@ describe('SensorsView', () => {
     await waitFor(() => expect(screen.getByText('Start on the pod').closest('button')!.disabled).toBe(false))
     fireEvent.click(screen.getByText('Start on the pod'))
     await screen.findByLabelText('Instance bmp280', {}, { timeout: 3000 })
-    expect(call).toHaveBeenCalledWith('set_pull', { las: [1, 2], enabled: true })
+    expect(call).toHaveBeenCalledWith('set_pull', { la: [1, 2], pull: 'up' })
     expect(pod.commands).toContainEqual({ cmd: 'sensor_start', instance: 'bmp280', pins: { sda: 1, scl: 2 }, address: '0x76' })
     expect(pod.commands.filter((c) => c.cmd === 'sensor_define').length).toBeGreaterThan(1)
   })

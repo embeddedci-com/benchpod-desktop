@@ -60,7 +60,7 @@ func (o *Output) Observe(name string, args map[string]any, ok bool) {
 			lo, hi := loopClamp(args)
 			o.loop = &[2]int{lo, hi}
 		}
-	case "dac_stop", "dac_output", "generate", "replay", "replay_waveform", "current_out", "fpga_image":
+	case "dac_stop", "dac_output", "generate", "replay", "current_out", "fpga_image":
 		o.loop = nil
 	}
 }
@@ -94,9 +94,10 @@ func routedBy(name string, args map[string]any) (string, bool) {
 		if p := str("dac_path"); p != "" {
 			return p, true
 		}
+		if name == "replay" && str("waveform_id") != "" {
+			return "", true // the cloud-library waveform's own output: unknown here
+		}
 		return "3v3", true
-	case "replay_waveform":
-		return str("dac_path"), true // "" = the waveform's own: unknown here
 	case "current_out":
 		if _, set := args["current"]; set {
 			return "current_out", true

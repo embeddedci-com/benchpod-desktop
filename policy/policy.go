@@ -34,7 +34,7 @@ type Limits struct {
 var Risky = []string{
 	"power_on", "power_off", "power_cycle_and_capture", "reset_target",
 	"flash", "spi_flash_program",
-	"dac_output", "current_out", "generate", "replay", "replay_waveform", "control_loop",
+	"dac_output", "current_out", "generate", "replay", "control_loop",
 	"analog_path", "set_pull", "set_la_voltage", "gpio_write", "gpio_pulse", "gpio_mode",
 	"set_wiring", "fpga_image", "calibrate", "calibrate_dac", "calibrate_adc_gain",
 	// Wiring profiles stored on the pod: saving, the default and deleting change what every tool
@@ -207,7 +207,7 @@ func (l Limits) CheckOutput(o *Output) func(name string, args map[string]any) er
 			if v, ok := num(args["current"]); ok && l.MaxCurrentOut > 0 && math.Abs(v) > l.MaxCurrentOut {
 				return fmt.Errorf("%.3g A is above this bench's current-loop limit of %.3g A", v, l.MaxCurrentOut)
 			}
-		case "replay", "replay_waveform":
+		case "replay": // volts, the last capture, or a cloud-library waveform (waveform_id)
 			return l.checkReplay(args)
 		}
 		return nil

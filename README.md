@@ -96,15 +96,18 @@ when a newer release is out, and an update: the latest release from GitHub, or, 
 `blobs-manifest.json` and the `blob-*.bin` files with their `.sig`). The pod checks the image and
 its signature, restarts into it, then gets the gateware and Wi-Fi bridge images. The app runs the
 bundled `benchpod` CLI for this (`benchpod flash-self --network`), over USB or your network; a
-pod on embeddedci.com updates from the web app.
+pod on embeddedci.com updates from the web app. A pod on firmware 3.x, which the app does not
+drive otherwise, gets this update too (see [Pod firmware 4.0](#pod-firmware-40)).
 
 **This pod** (in Settings, under Pod firmware): the pod's board, firmware, connection, network
 address and USB network adapter at a glance; Wi-Fi (show the network, scan, join, forget); network
 access on Ethernet and Wi-Fi (open, locked or off) and HTTPS-only; the USB network adapter on or
-off; the firmware signature policy; and, with offline mode off and `benchpod login` done,
-deregistering the pod from embeddedci.com. The bundled `benchpod` CLI does the settings no
-BenchPod tool covers, over the pod's USB console. The Wi-Fi password goes to it on stdin and is
-never logged.
+off; the firmware signature policy (shown only: firmware 4.0 always requires signed images); and,
+with offline mode off and `benchpod login` done, deregistering the pod from embeddedci.com. The
+bundled `benchpod` CLI does the settings no BenchPod tool covers: Wi-Fi and the signature policy
+as JSON over the pod's USB network adapter, network access and the USB network adapter over its
+USB console. The Wi-Fi password goes to it on stdin and is never logged. The app reads the CLI's
+exit codes, not its wording: 7 means the pod needs firmware 4.0, 6 that the app needs updating.
 
 **Calibration** (in Settings): what the pod has stored, the ADC offset (nothing on J8), each DAC
 output's line from two readings of your DMM, the ADC gains measured against those outputs, and
@@ -181,6 +184,16 @@ Recent versions of Homebrew ask you to trust a tap before they load anything fro
 Windows and Linux installers are on the [releases page](https://github.com/embeddedci-com/benchpod-desktop/releases).
 They are not code-signed yet: on Windows, SmartScreen asks you to confirm the first start. On a Mac,
 the cask removes the download quarantine for you.
+
+## Pod firmware 4.0
+
+The app drives pods on **firmware 4.0 or later**: its BenchPod tools (embeddedci-mcp 4) and its
+bundled `benchpod` CLI (0.10) speak firmware 4.0's protocol (client API 2) and refuse firmware 3.x.
+A pod on firmware 3.x still takes the update, so the app offers it: **Find my pod** says the pod
+needs firmware 4.0 and **Use this pod and update it** opens **Pod firmware** in Settings; a pod
+found earlier shows "pod needs firmware 4.0 · update" at the top. The update runs the bundled
+`benchpod flash-self --network`, over USB or your network. Keep an older app for pods you do not
+update.
 
 ## First start
 

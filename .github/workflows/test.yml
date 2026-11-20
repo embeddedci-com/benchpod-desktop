@@ -36,9 +36,12 @@ jobs:
         with:
           node-version: 22
       # The first-run test drives the real MCP server against the simulated pod (benchpod-sim).
+      # embeddedci-mcp 4 refuses the simulator's firmware 3.x (FirmwareTooOldError), so the test
+      # runs a 3.x server until benchpod-sim speaks firmware 4.0 (its fw4-names branch); then
+      # install the release local/mcp.go pins (MCPSpec) and bump benchpod-sim in go.mod.
       - name: Install the BenchPod MCP server
         run: |
           python3 -m venv "$RUNNER_TEMP/mcp"
-          "$RUNNER_TEMP/mcp/bin/pip" install --quiet embeddedci-mcp
+          "$RUNNER_TEMP/mcp/bin/pip" install --quiet 'embeddedci-mcp<4'
           echo "BENCHPOD_MCP_COMMAND=$RUNNER_TEMP/mcp/bin/embeddedci-mcp" >> "$GITHUB_ENV"
       - run: make -C benchpod-desktop test
