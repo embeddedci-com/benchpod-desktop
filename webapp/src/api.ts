@@ -27,7 +27,12 @@ export type FoundPod = {
   la_voltage: number | null
   error?: string
   tried: string[]
+  /** The pod answered, but the app cannot drive it: firmware 3.x (offer the update), or newer than the app. */
+  compat?: PodCompat
 }
+
+/** Why the app cannot drive the pod it reached: firmware_too_old (3.x, the app offers the update) or app_too_old. */
+export type PodCompat = 'firmware_too_old' | 'app_too_old'
 
 export type Preset = {
   id: string
@@ -51,7 +56,7 @@ export type AppState = {
   model_warning: string
   /** since: when the current state began (RFC 3339), for how long an install or start has run. */
   mcp: { state: 'stopped' | 'installing' | 'starting' | 'ready' | 'failed'; error: string; since?: string }
-  pod: { connected: boolean; connection?: string; error?: string; status?: Record<string, unknown> }
+  pod: { connected: boolean; connection?: string; error?: string; status?: Record<string, unknown>; compat?: PodCompat; firmware?: string }
   data_dir: string
   offline: boolean
   offline_forced: boolean

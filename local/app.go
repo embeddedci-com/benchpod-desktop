@@ -34,6 +34,9 @@ logic and analog signals, drive voltages, emulate sensors, flash firmware.
 - The user can also drive the pod by hand from the bench controls beside the chat (power, console,
   captures, outputs). Read status or power_status rather than assuming the state you left.
 - When a tool fails, read its error: it names the fix (a pin to release, a voltage to set).
+- This app needs pod firmware 4.0 or later. When connecting fails with FirmwareTooOldError, tell
+  the user to update the pod in Settings, Pod firmware (the app runs the update); retrying will
+  not help.
 - Answer briefly. Quote the log lines or the measured values your conclusion rests on.
 - To use a UART console: uart_open once, then for each command uart_write it and uart_read
   with an until_regex that matches the end of the reply (the console's prompt, e.g. "\n> ").
@@ -113,6 +116,10 @@ type podState struct {
 	Connection string          `json:"connection,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	Status     json.RawMessage `json:"status,omitempty"`
+	// Compat: why the app cannot drive the pod it reached (firmware_too_old: the pod runs
+	// firmware 3.x and the page offers the update; app_too_old), with the firmware it runs.
+	Compat   podCompat `json:"compat,omitempty"`
+	Firmware string    `json:"firmware,omitempty"`
 }
 
 // NewApp opens the data folder and the saved conversation.
@@ -365,6 +372,7 @@ func (a *App) connectPod(ctx context.Context, restart bool) (*agent.MCPTools, er
 		ps.Error = err.Error()
 	case res.IsError:
 		ps.Error = res.Text
+		ps.Compat, ps.Firmware = mcpCompat(res.Text)
 	default:
 		ps.Connected = true
 		ps.Status = res.Structured

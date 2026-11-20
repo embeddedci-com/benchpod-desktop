@@ -29,6 +29,9 @@ type foundPod struct {
 	LAVoltage  *float64 `json:"la_voltage"`
 	Error      string   `json:"error,omitempty"`
 	Tried      []string `json:"tried"`
+	// Compat: the pod answered but the app cannot drive it (firmware_too_old: firmware 3.x, which
+	// the app offers to update; app_too_old). Version is then the firmware it runs, when known.
+	Compat podCompat `json:"compat,omitempty"`
 }
 
 func (a *App) findPod(ctx context.Context, conn string) foundPod {
@@ -86,6 +89,13 @@ func (a *App) findPod(ctx context.Context, conn string) foundPod {
 		msg := res.Text
 		if err != nil {
 			msg = err.Error()
+		} else if compat, fw := mcpCompat(res.Text); compat != compatOK {
+			// Found it, on firmware this app does not drive: the page offers the update.
+			out = foundPod{Connection: c, Version: fw, Compat: compat, Error: msg, Tried: out.Tried}
+			a.mu.Lock()
+			a.pod = podState{Connection: c, Error: msg, Compat: compat, Firmware: fw}
+			a.mu.Unlock()
+			return out
 		}
 		errs = append(errs, label+": "+msg)
 	}

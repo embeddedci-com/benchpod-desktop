@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMediaQuery } from '@mantine/hooks'
 import { desktopSequenceStore } from './sequences'
 import { ActionIcon, Anchor, Badge, Box, Button, Card, Divider, Drawer, Group, Loader, Modal, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core'
-import { BenchPanel, BusDashboard, ChatView, benchOutputs, ConsoleTerminal, EspFlashControls, FlashControls, FlashModes, CalibrationControls, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary, type PanelControls, type PanelTab, type SequenceStore } from '@bpui'
+import { BenchPanel, BusDashboard, ChatView, benchOutputs, ConsoleTerminal, EspFlashControls, FlashControls, FlashModes, CalibrationControls, HelpTip, PodSettings, SpiFlashControls, GeneratorControls, PodUpdate, newerVersion, PowerControls, useBenchCall, useChat, useTools, type FetchCapture, type FirmwareStore, type PodUpdater, type WaveformLibrary, type PanelControls, type PanelTab, type SequenceStore } from '@bpui'
 import { api, type AppState } from './api'
 import { SettingsPanel } from './SettingsPanel'
 import { WiringTab } from './WiringTab'
@@ -146,7 +146,19 @@ export function App() {
 
   const busySecs = state.mcp.since ? Math.max(0, Math.round((Date.now() - Date.parse(state.mcp.since)) / 1000)) : 0
   const busyFor = busySecs >= 10 ? ` ${Math.floor(busySecs / 60)}:${String(busySecs % 60).padStart(2, '0')}` : ''
-  const podBadge = state.pod.connected ? (
+  const podBadge = state.pod.compat === 'firmware_too_old' ? (
+    <Tooltip label={state.pod.error} multiline w={360}>
+      <Badge color="orange" variant="light" style={{ cursor: 'pointer' }} onClick={() => setSettingsOpen(true)}>
+        pod needs firmware 4.0 · update
+      </Badge>
+    </Tooltip>
+  ) : state.pod.compat === 'app_too_old' ? (
+    <Tooltip label={state.pod.error} multiline w={360}>
+      <Badge color="orange" variant="light">
+        pod firmware is newer than the BenchPod tools · update
+      </Badge>
+    </Tooltip>
+  ) : state.pod.connected ? (
     <Badge color="green" variant="light">
       pod connected{state.pod.connection ? ` · ${state.pod.connection}` : ''}
     </Badge>
@@ -265,7 +277,7 @@ export function App() {
               <Title order={4} mb={4}>
                 Find your pod
               </Title>
-              <PodSetup state={state} onDone={setState} />
+              <PodSetup state={state} onDone={setState} onUpdateFirmware={() => setSettingsOpen(true)} />
               <Anchor size="xs" c="dimmed" mt="md" component="button" onClick={() => void api.saveSettings({ pod_setup_done: true }).then(setState)}>
                 Skip: find it later from the pod badge at the top
               </Anchor>
@@ -344,6 +356,7 @@ export function App() {
             setState(s)
             setFindOpen(false)
           }}
+          onUpdateFirmware={() => setSettingsOpen(true)}
         />
       </Modal>
 
@@ -358,7 +371,16 @@ export function App() {
         <Text fw={600} mb="xs">
           Pod firmware
         </Text>
-        <PodUpdate updater={podUpdater} connected={state.pod.connected} />
+        {state.pod.compat === 'firmware_too_old' ? (
+          <Text size="sm" c="orange" mb="xs">
+            Needs firmware 4.0 or later{state.pod.firmware ? ` (runs ${state.pod.firmware})` : ''}{' '}
+            <HelpTip label="firmware 4.0" docs="/docs/benchpod-firmware-update">
+              The app drives pods on firmware 4.0 or later. Update this pod here: the app runs the update with its benchpod CLI.
+            </HelpTip>
+          </Text>
+        ) : null}
+        {/* A pod on firmware 3.x answers only the update: offer it although the tools refused it. */}
+        <PodUpdate updater={podUpdater} connected={state.pod.connected || state.pod.compat === 'firmware_too_old'} />
         <Divider my="md" />
         <PodSettings call={bench.call} podCall={podCli.call} offline={state.offline} />
         <Divider my="md" />

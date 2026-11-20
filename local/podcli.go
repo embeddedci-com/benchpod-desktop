@@ -17,8 +17,10 @@ import (
 )
 
 // The pod's own settings that no MCP tool covers: Wi-Fi, LAN access, the USB network adapter, the
-// signature policy, deregistering. The bundled benchpod CLI does them (most over the pod's USB
-// console), so the Settings tab runs it, only for this fixed list of commands, with the same
+// signature policy (firmware 4.0: required only), deregistering. The
+// bundled benchpod CLI (0.10) does them: the Wi-Fi and network commands and sig-policy as JSON over
+// the pod's USB network adapter, lan-policy and usb-network over its USB console. The Settings tab
+// runs it, only for this fixed list of commands, with the same
 // request and answer as the tool endpoint (bench.go), confirmations included:
 //
 //	POST /api/pod/cli/{command}  {"args": {...}, "confirmed": false}
@@ -60,6 +62,9 @@ func setting(name string, values ...string) podCLICommand {
 			if v == "" {
 				return []string{name, "show"}, nil
 			}
+			if len(values) == 0 {
+				return nil, fmt.Errorf("%s cannot be changed: firmware 4.0 always requires signed images (BP0074)", name)
+			}
 			if err := oneOf(v, values...); err != nil {
 				return nil, err
 			}
@@ -87,22 +92,40 @@ var podCLICommands = map[string]podCLICommand{
 	},
 	"clear-wifi": {argv: func(map[string]any) ([]string, error) { return []string{"clear-wifi"}, nil }, changes: always, timeout: time.Minute},
 	"lan-policy": setting("lan-policy", "open", "locked", "off"),
-	"sig-policy": setting("sig-policy", "audit", "permissive", "required"),
+	// Firmware 4.0 always requires signatures (BP0074): "required" is the only setting left.
+	"sig-policy": setting("sig-policy", "required"),
 	"usb-network": {
 		argv: func(args map[string]any) ([]string, error) {
-			v := str(args, "set")
-			if v == "" {
-				return []string{"usb-network", "show"}, nil
-			}
-			if err := oneOf(v, "on", "off"); err != nil {
-				return nil, err
+			v, err := usbNetworkSet(args)
+			if err != nil || v == "" {
+				return []string{"usb-network", "show"}, err
 			}
 			return []string{"usb-network", v}, nil
 		},
-		changes: func(args map[string]any) bool { return str(args, "set") != "" },
+		changes: func(args map[string]any) bool { v, err := usbNetworkSet(args); return err == nil && v != "" },
 		timeout: time.Minute,
 	},
 	"deregister": {argv: func(map[string]any) ([]string, error) { return []string{"deregister"}, nil }, changes: always, cloud: true, timeout: 2 * time.Minute},
+}
+
+// usbNetworkSet is the usb-network change the page asks for: {"enabled": true|false} (the
+// firmware 4.0 form, as the MCP tool's), or {"set": "on"|"off"}; "" reads the setting.
+func usbNetworkSet(args map[string]any) (string, error) {
+	if e, ok := args["enabled"]; ok && e != nil {
+		b, ok := e.(bool)
+		if !ok {
+			return "", errors.New("enabled is true or false")
+		}
+		if b {
+			return "on", nil
+		}
+		return "off", nil
+	}
+	v := str(args, "set")
+	if v == "" {
+		return "", nil
+	}
+	return v, oneOf(v, "on", "off")
 }
 
 // podCLILogArgs hides the Wi-Fi password from the action log.
@@ -152,18 +175,27 @@ func (a *App) runPodCLI(ctx context.Context, name string, req toolRequest) toolR
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, cli, argv...)
-	cmd.Env = append(os.Environ(), "BENCHPOD_NO_FIRMWARE_REPORT=1")
-	if offline {
-		cfg := filepath.Join(a.store.Dir(), "offline-config")
-		_ = os.MkdirAll(cfg, 0o700)
-		cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+cfg)
-	}
-	if c.stdin != nil {
-		cmd.Stdin = strings.NewReader(c.stdin(req.Args))
+	run := func() ([]byte, error) {
+		cmd := exec.CommandContext(ctx, cli, argv...)
+		cmd.Env = append(os.Environ(), "BENCHPOD_NO_FIRMWARE_REPORT=1")
+		if offline {
+			cfg := filepath.Join(a.store.Dir(), "offline-config")
+			_ = os.MkdirAll(cfg, 0o700)
+			cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+cfg)
+		}
+		if c.stdin != nil {
+			cmd.Stdin = strings.NewReader(c.stdin(req.Args))
+		}
+		return cmd.CombinedOutput()
 	}
 	t0 := time.Now()
-	out, err := cmd.CombinedOutput()
+	out, err := run()
+	// Busy (exit 4): the MCP server's session holds the pod (its lease on the USB network or the
+	// LAN). Let go of it and try once more.
+	if cliExitCode(err) == cliExitBusy && a.podConnected() {
+		a.releasePod()
+		out, err = run()
+	}
 	d := time.Since(t0)
 	text := strings.TrimSpace(stripCLIDebug(string(out)))
 	if p, _ := req.Args["password"].(string); p != "" {
@@ -174,6 +206,10 @@ func (a *App) runPodCLI(ctx context.Context, name string, req toolRequest) toolR
 		res.IsError = true
 		if ctx.Err() != nil {
 			res.Text = strings.TrimSpace(text + "\n(no answer within " + c.timeout.String() + ")")
+		}
+		// Exit 7: the pod runs firmware 3.x; exit 6: its firmware is newer than the bundled CLI.
+		if h := compatHint(cliCompat(cliExitCode(err))); h != "" {
+			res.Text = strings.TrimSpace(res.Text + "\n" + h)
 		}
 	}
 	if changes {
@@ -210,6 +246,12 @@ func (a *App) podKind() string {
 	}
 	_ = json.Unmarshal(raw, &st)
 	return st.Kind
+}
+
+func (a *App) podConnected() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.tools != nil && a.pod.Connected
 }
 
 // releasePod stops the MCP server, so another program can talk to the pod.

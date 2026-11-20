@@ -30,7 +30,7 @@ func TestLimits(t *testing.T) {
 		{"replay", map[string]any{"volts": []any{0.0, 1.0}, "mapping": "fit"}, true},
 		{"replay", map[string]any{"volts": []any{0.004, 0.019}, "dac_path": "current_out"}, true},
 		{"replay", map[string]any{"from_last_capture": true}, true},
-		{"replay_waveform", map[string]any{"waveform_id": "x", "mapping": "fit", "dac_path": "12v"}, false},
+		{"replay", map[string]any{"waveform_id": "x", "mapping": "fit", "dac_path": "12v"}, false},
 	}
 	for _, c := range cases {
 		if err := check(c.tool, c.args); (err == nil) != c.ok {

@@ -54,17 +54,16 @@ export function SensorsView({ state, call, onUpdateFirmware }: { state: AppState
     () => ({
       pinDefaults: (kind) => (wiring ? pinsFromWiring(wiring, kind) : {}),
       channelLabel: (la) => (wiring ? laChannelLabel(wiring, la) : `LA${la}`),
-      // I2C needs pull-ups on SDA and SCL: switch them on (LA1-LA6 pull up) so the first start
-      // works. Not at 1.8 V, where the pod has none. set_pull asks first, like every bench control.
+      // I2C needs pull-ups on SDA and SCL: switch them on (the channels that can pull up) so the
+      // first start works. set_pull asks first, like every bench control.
       prepareStart: async (kind, pins) => {
-        if (kind !== 'i2c' || wiring?.la_mv === 1800) return
-        const las = [Number(pins.sda), Number(pins.scl)].filter((la) => la >= 1 && la <= 6)
-        if (!las.length) return
+        if (kind !== 'i2c') return
+        const ps = benchData<{ channels?: { la: number; state: string; supported?: string[] }[] }>(await call('pull_status', {}, { poll: true }))
+        const ch = (la: number) => ps?.channels?.find((c) => c.la === la)
+        const la = [Number(pins.sda), Number(pins.scl)].filter((n) => !!ch(n)?.supported?.includes('up'))
         // Already on: no need to ask for them (the start itself still asks).
-        const ps = benchData<{ channels?: { la: number; enabled: boolean; direction: string }[] }>(await call('pull_status', {}, { poll: true }))
-        const on = (la: number) => !!ps?.channels?.some((c) => c.la === la && c.enabled && c.direction === 'up')
-        if (las.every(on)) return
-        const r = await call('set_pull', { las, enabled: true })
+        if (!la.length || la.every((n) => ch(n)?.state === 'up')) return
+        const r = await call('set_pull', { la, pull: 'up' })
         if (r.declined) throw new Error('Not started: the pull-ups were declined.')
         const e = benchError(r)
         if (e) throw new Error(`Pull-ups: ${e}`)

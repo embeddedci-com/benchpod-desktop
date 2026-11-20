@@ -15,7 +15,7 @@ const KINDS: Record<string, string> = {
  * pod it found, and saves it. The board's I/O voltage is in the pod's wiring profile (the Pins tab).
  * Nothing is registered anywhere.
  */
-export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppState) => void }) {
+export function PodSetup({ state, onDone, onUpdateFirmware }: { state: AppState; onDone: (s: AppState) => void; onUpdateFirmware?: () => void }) {
   const [finding, setFinding] = useState(false)
   const [found, setFound] = useState<FoundPod | null>(null)
   const [conn, setConn] = useState(state.settings.connection)
@@ -36,13 +36,17 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
     }
   }
 
+  // Firmware 3.x: the pod answered, but the app drives firmware 4.0 or later. Save it and update it.
+  const tooOld = found?.compat === 'firmware_too_old'
+
   const use = async () => {
-    if (!found?.connected) return
+    if (!found?.connected && !tooOld) return
     setSaving(true)
     setError(undefined)
     try {
       // The I/O voltage comes from the pod's wiring profile; la_voltage 0 clears an older app's override.
-      onDone(await api.saveSettings({ connection: found.connection, la_voltage: 0, pod_setup_done: true }))
+      onDone(await api.saveSettings({ connection: found!.connection, la_voltage: 0, pod_setup_done: true }))
+      if (tooOld) onUpdateFirmware?.()
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -80,7 +84,23 @@ export function PodSetup({ state, onDone }: { state: AppState; onDone: (s: AppSt
           </Text>
         </Group>
       ) : null}
-      {found && !found.connected ? (
+      {tooOld ? (
+        <Stack gap="xs">
+          <Alert color="orange" variant="light" title="Found your pod: it needs firmware 4.0">
+            <Text size="sm">
+              Firmware {found?.version || '3.x'}{' '}
+              <HelpTip label="firmware 4.0" docs="/docs/benchpod-firmware-update">
+                The app drives pods on firmware 4.0 or later. It updates this one for you, over the same connection.
+              </HelpTip>
+            </Text>
+          </Alert>
+          <Group>
+            <Button onClick={() => void use()} loading={saving}>
+              Use this pod and update it
+            </Button>
+          </Group>
+        </Stack>
+      ) : found && !found.connected ? (
         <Alert color="orange" variant="light" title="No pod found">
           <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
             {found.error}
