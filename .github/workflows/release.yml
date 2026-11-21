@@ -25,9 +25,9 @@ permissions:
 
 env:
   # The benchpod CLI release bundled with the app (it updates the pod's own firmware).
-  # RELEASE PIN (firmware 4.0 cutover): the tag v0.10.1 must exist on benchpod-cli, else the
+  # RELEASE PIN (firmware 4.0 cutover): the tag v0.10.2 must exist on benchpod-cli, else the
   # checkout below fails. embeddedci-mcp==4.0.1 in local/mcp.go (MCPSpec) goes with it.
-  BENCHPOD_CLI_REF: v0.10.1
+  BENCHPOD_CLI_REF: v0.10.2
 
 jobs:
   prepare:

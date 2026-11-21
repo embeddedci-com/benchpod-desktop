@@ -27,7 +27,7 @@ import (
 // PyPI upload never reaches the app without a release of the app.
 //
 // RELEASE PIN (firmware 4.0.1, LAN pairing): 4.0.1 must be on PyPI before an app with it ships; until
-// then the app cannot install its tools. benchpod-cli v0.10.1 in release.yml goes with it.
+// then the app cannot install its tools. benchpod-cli v0.10.2 in release.yml goes with it.
 const MCPSpec = "embeddedci-mcp==4.0.1"
 
 // The private uv (step 4 below) is this uv release, from its GitHub release archive, checked
