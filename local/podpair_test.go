@@ -124,6 +124,27 @@ func TestPairRunsCLI(t *testing.T) {
 	if _, err := os.Stat(argvFile); err == nil {
 		t.Error("the CLI ran for a LAN address that is not the app's connection")
 	}
+	// A pod Find your pod reached that refused this computer (not the app's connection yet): pair
+	// over that pod's own address, so the CLI pairs it through its USB link.
+	app.mu.Lock()
+	app.pod = podState{Connection: "192.168.1.170", Compat: compatNotPaired}
+	app.mu.Unlock()
+	if o := app.pairingOptions(t.Context()); o.USB != "192.168.1.170" {
+		t.Errorf("pairing options for the found pod: %+v", o)
+	}
+	// pairingOptions started the (fake) MCP server, which clears the pod state; a real Find runs
+	// after the server is up, so set it again.
+	app.mu.Lock()
+	app.pod = podState{Connection: "192.168.1.170", Compat: compatNotPaired}
+	app.mu.Unlock()
+	_ = pair("192.168.1.170")
+	if b, _ := os.ReadFile(argvFile); strings.TrimSpace(string(b)) != "--connection 192.168.1.170 lan-clients add" {
+		t.Errorf("found pod argv: %q", b)
+	}
+	_ = os.Remove(argvFile)
+	app.mu.Lock()
+	app.pod = podState{}
+	app.mu.Unlock()
 	// The app's own LAN connection goes to the CLI as it is.
 	st0 := app.store.Load()
 	st0.Connection = "192.168.1.164"

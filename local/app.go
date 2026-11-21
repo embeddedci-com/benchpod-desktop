@@ -265,6 +265,14 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	a.setMCPState(MCPStarting, "")
 	a.mu.Unlock()
 	if old != nil {
+		// Let the old server release the pod's lease first: closing it alone leaves the lease
+		// held until its TTL (2 min), and the new server's connect then waits on it (seen after
+		// pairing, where Find restarts the server right after the old one reached the pod).
+		if old.Alive() {
+			dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+			_, _ = old.Call(dctx, "disconnect", map[string]any{})
+			cancel()
+		}
 		_ = old.Close()
 	}
 	fail := func(err error) (*agent.MCPTools, error) {
