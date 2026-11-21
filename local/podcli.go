@@ -274,9 +274,7 @@ func (a *App) releasePod() {
 	a.mu.Unlock()
 	a.console.reset()
 	a.buses.reset()
-	if t != nil {
-		_ = t.Close()
-	}
+	closeMCP(context.Background(), t)
 	a.connMu.Unlock()
 }
 
