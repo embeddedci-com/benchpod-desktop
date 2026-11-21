@@ -104,8 +104,13 @@ export function PodPairing({
                 docs="/docs/benchpod-security#lan-pairing"
               >
                 Use the USB-C IN port on the back of the pod, once. The app
-                pairs {opts.pod_name || "the pod on USB"}, then connects again
-                over the network. You can unplug the cable afterwards.
+                pairs{" "}
+                {opts.pod_name ||
+                  (opts.usb === "usb" || opts.usb.startsWith("usb:")
+                    ? "the pod on USB"
+                    : "the pod it is connected to")}
+                , then connects again over the network. You can unplug the cable
+                afterwards.
               </HelpTip>
             </Text>
           </Group>

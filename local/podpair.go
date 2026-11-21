@@ -18,7 +18,9 @@ import (
 // pairing on answers only status to a computer whose TLS client key is not on its list; the MCP
 // server then refuses the connect with PodNotPairedError (BP0081), and the page shows the kind
 // not_paired (podcompat.go). Pairing goes over USB or embeddedci.com, never over the LAN: the
-// bundled CLI's `lan-clients add` with --connection usb[:<name>] or embeddedci:<name>. The CLI,
+// bundled CLI's `lan-clients add` with --connection usb[:<name>] or embeddedci:<name>, or with the
+// app's own LAN connection (an address or a name), where the CLI reads the pod's status and pairs
+// over that pod's own USB link (usb.ip) when its cable is in this computer. The CLI,
 // the SDK and so the MCP server share one client key per user, so the MCP server's next connect
 // is paired.
 //
@@ -33,11 +35,28 @@ const pairTimeout = 2 * time.Minute
 // A pod's name: benchpod-a1b2c3, or the name it has on embeddedci.com (URL-safe).
 var podNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// The short form `benchpod-a1b2c3` the pod advertises.
-var podOwnName = regexp.MustCompile(`^benchpod-[0-9a-f]{6}$`)
+// The short form `benchpod-a1b2c3` the pod advertises, with or without .local.
+var podOwnName = regexp.MustCompile(`^benchpod-[0-9a-f]{6}(\.local)?$`)
+
+// A LAN connection the app may hand the CLI: host or IPv4[:port], no spaces, never a flag.
+var lanConnPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,252}(:[0-9]{1,5})?$`)
+
+// isLANConnection: conn is a network address or name (192.168.1.164, benchpod-a1b2c3.local),
+// not usb, usb:<name>, embeddedci:<name> or a serial device.
+func isLANConnection(conn string) bool {
+	lower := strings.ToLower(strings.TrimSpace(conn))
+	switch {
+	case lower == "" || lower == "usb" || strings.HasPrefix(lower, "usb:") || strings.HasPrefix(lower, "embeddedci:"):
+		return false
+	case strings.HasPrefix(lower, "com") && strings.Trim(lower[3:], "0123456789") == "" && len(lower) > 3:
+		return false // COM3
+	}
+	return lanConnPattern.MatchString(strings.TrimSpace(conn))
+}
 
 // podNameFromConnection is the pod's name when the connection names it: usb:<name>,
-// embeddedci:<name> or benchpod-a1b2c3. "" for an address, "usb" or the LAN default.
+// embeddedci:<name>, benchpod-a1b2c3 or benchpod-a1b2c3.local. "" for an address, "usb" or the
+// LAN default.
 func podNameFromConnection(conn string) string {
 	conn = strings.TrimSpace(conn)
 	lower := strings.ToLower(conn)
@@ -51,15 +70,23 @@ func podNameFromConnection(conn string) string {
 		name = lower
 	}
 	name = strings.TrimSpace(name)
+	if podOwnName.MatchString(strings.ToLower(name)) {
+		name = strings.TrimSuffix(strings.ToLower(name), ".local")
+	}
 	if !podNamePattern.MatchString(name) {
 		return ""
 	}
 	return name
 }
 
-// pairUSBConnection is the CLI connection to pair over the pod's USB-C cable: usb:<name> for the
-// pod the app knows, else usb (the one pod on USB; with several the CLI lists them).
-func pairUSBConnection(name string) string {
+// pairUSBConnection is the CLI connection to pair over the pod's USB-C cable for the app's
+// connection conn: conn itself when it is a LAN address or name (the CLI pairs over that pod's own
+// USB link, whatever else is on USB), usb:<name> for the pod the app knows, else usb (the one pod
+// on USB; with several the CLI lists them).
+func pairUSBConnection(conn, name string) string {
+	if isLANConnection(conn) {
+		return strings.TrimSpace(conn)
+	}
 	if name == "" {
 		return "usb"
 	}
@@ -69,9 +96,12 @@ func pairUSBConnection(name string) string {
 // pairCloudConnection is the CLI connection to pair through embeddedci.com.
 func pairCloudConnection(name string) string { return "embeddedci:" + name }
 
-// validPairConnection: only USB and embeddedci.com may pair (the pod refuses it over the LAN).
-func validPairConnection(conn string) bool {
+// validPairConnection: USB and embeddedci.com may pair, and the app's own LAN connection appConn
+// (the CLI pairs over that pod's USB link; the pod refuses it over the LAN itself).
+func validPairConnection(conn, appConn string) bool {
 	switch {
+	case isLANConnection(conn):
+		return strings.EqualFold(conn, strings.TrimSpace(appConn))
 	case conn == "usb":
 		return true
 	case strings.HasPrefix(conn, "usb:"):
@@ -106,7 +136,7 @@ type pairingOptions struct {
 func (a *App) pairingOptions(ctx context.Context) pairingOptions {
 	st := a.store.Load()
 	name := podNameFromConnection(st.Connection)
-	out := pairingOptions{PodName: name, USB: pairUSBConnection(name), Cloud: []cloudPod{}, Offline: a.offline(st)}
+	out := pairingOptions{PodName: name, USB: pairUSBConnection(st.Connection, name), Cloud: []cloudPod{}, Offline: a.offline(st)}
 	if out.Offline {
 		return out
 	}
@@ -151,10 +181,10 @@ type pairResult struct {
 // pairPod runs `benchpod lan-clients add` over conn, then connects to the pod again.
 func (a *App) pairPod(ctx context.Context, conn string) pairResult {
 	conn = strings.TrimSpace(conn)
-	if !validPairConnection(conn) {
-		return pairResult{Text: "pair over usb, usb:<name> or embeddedci:<name>"}
-	}
 	st := a.store.Load()
+	if !validPairConnection(conn, st.Connection) {
+		return pairResult{Text: "pair over usb, usb:<name>, embeddedci:<name> or the app's own connection"}
+	}
 	offline := a.offline(st)
 	cloud := strings.HasPrefix(conn, "embeddedci:")
 	if cloud && offline {
@@ -193,7 +223,7 @@ func (a *App) pairPod(ctx context.Context, conn string) pairResult {
 		a.mu.Lock()
 		pod := a.pod
 		a.mu.Unlock()
-		return pairResult{Text: text, Pod: pod}
+		return pairResult{Text: pairErrorText(text), Pod: pod}
 	}
 	// Paired: connect again (the MCP server's connect, over the app's own connection).
 	_, cerr := a.connectPod(ctx, true)
@@ -217,4 +247,37 @@ func (a *App) servePodPair(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
 	defer cancel()
 	chat.WriteJSON(w, http.StatusOK, a.pairPod(ctx, body.Connection))
+}
+
+// pairErrorText is the CLI's failure as the panel's error line: its error ("[benchpod] ..."
+// lines) without the log prefix and the command's name, else everything it printed.
+func pairErrorText(out string) string {
+	var errs []string
+	for _, l := range strings.Split(out, "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(l), "[benchpod] "); ok {
+			errs = append(errs, strings.TrimSpace(rest))
+		}
+	}
+	if len(errs) == 0 {
+		return strings.TrimSpace(out)
+	}
+	text := strings.Join(errs, "\n")
+	for _, p := range []string{"lan-clients add: ", "lan-clients: "} {
+		text = strings.TrimPrefix(text, p)
+	}
+	if text != "" {
+		text = strings.ToUpper(text[:1]) + text[1:]
+	}
+	return text
+}
+
+// mcpConnection is the connection the MCP server gets for the app's conn: a bare pod name
+// (benchpod-a1b2c3) gets .local, which the SDK resolves over mDNS like any host; the SDK would
+// otherwise ask the OS resolver for "benchpod-a1b2c3" and fail. Everything else as given.
+func mcpConnection(conn string) string {
+	c := strings.TrimSpace(conn)
+	if podOwnName.MatchString(strings.ToLower(c)) && !strings.HasSuffix(strings.ToLower(c), ".local") {
+		return c + ".local"
+	}
+	return c
 }

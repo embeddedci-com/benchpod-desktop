@@ -83,6 +83,31 @@ describe("PodPairing", () => {
     ]);
   });
 
+  it("on the LAN, pairs over the app's own connection and shows the CLI's message", async () => {
+    const sent: unknown[] = [];
+    const msg =
+      "This computer is not paired with the pod at 192.168.1.164:8080, and the pod is not plugged into this computer over USB.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (path: string, init?: RequestInit) => {
+        if (path === "/api/pod/pairing")
+          return json({ usb: "192.168.1.164", cloud: [], offline: false });
+        sent.push(JSON.parse(String(init?.body)));
+        return json({ ok: false, text: msg, pod: { connected: false } });
+      }),
+    );
+    render(
+      <MantineProvider>
+        <PodPairing />
+      </MantineProvider>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Pair this computer" }),
+    );
+    expect(await screen.findByText(msg)).toBeTruthy();
+    expect(sent).toEqual([{ connection: "192.168.1.164" }]);
+  });
+
   it("without a cloud way, says to switch LAN pairing off", async () => {
     vi.stubGlobal(
       "fetch",

@@ -64,7 +64,7 @@ func (a *App) findPod(ctx context.Context, conn string) foundPod {
 		out.Tried = append(out.Tried, label)
 		args := map[string]any{}
 		if c != "" {
-			args["connection"] = c
+			args["connection"] = mcpConnection(c)
 		}
 		res, err := t.Call(ctx, "connect", args)
 		if err == nil && !res.IsError {
