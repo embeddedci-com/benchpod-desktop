@@ -37,7 +37,9 @@ const pairTimeout = 2 * time.Minute
 var podNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // The short form `benchpod-a1b2c3` the pod advertises, with or without .local.
-var podOwnName = regexp.MustCompile(`^benchpod-[0-9a-f]{6}(\.local)?$`)
+const podOwnNameRe = `benchpod-[0-9a-f]{6}`
+
+var podOwnName = regexp.MustCompile(`^` + podOwnNameRe + `(\.local)?$`)
 
 // A LAN connection the app may hand the CLI: host or IPv4[:port], no spaces, never a flag.
 var lanConnPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,252}(:[0-9]{1,5})?$`)

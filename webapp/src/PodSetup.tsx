@@ -23,12 +23,12 @@ export function PodSetup({ state, onDone, onUpdateFirmware }: { state: AppState;
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | undefined>()
 
-  const find = async () => {
+  const find = async (where = conn) => {
     setFinding(true)
     setError(undefined)
     setFound(null)
     try {
-      const f = await api.findPod(conn)
+      const f = await api.findPod(where)
       setFound(f)
     } catch (e) {
       setError((e as Error).message)
@@ -110,6 +110,27 @@ export function PodSetup({ state, onDone, onUpdateFirmware }: { state: AppState;
             if (pod.connected) void find()
           }}
         />
+      ) : found && !found.connected && found.choices?.length ? (
+        <Alert color="blue" variant="light" title="Several pods found">
+          <Group gap="xs">
+            {found.choices.map((c) => (
+              <Button
+                key={c.name}
+                size="xs"
+                variant="light"
+                onClick={() => {
+                  setConn(c.connection)
+                  void find(c.connection)
+                }}
+              >
+                {c.name}
+              </Button>
+            ))}
+            <HelpTip label="which pod" docs="/docs/benchpod-getting-started#1-plug-in-the-pod">
+              Each button looks for that one pod: usb:&lt;name&gt; for a pod on USB, &lt;name&gt;.local on your network.
+            </HelpTip>
+          </Group>
+        </Alert>
       ) : found && !found.connected ? (
         <Alert color="orange" variant="light" title="No pod found">
           <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>

@@ -29,7 +29,12 @@ export type FoundPod = {
   tried: string[]
   /** The pod answered, but the app cannot drive it: firmware 3.x (offer the update), or newer than the app. */
   compat?: PodCompat
+  /** Several pods found (on USB or the network): each connection finds that one pod alone. */
+  choices?: PodChoice[]
 }
+
+/** One of several pods Find saw: benchpod-a1b2c3 with usb:benchpod-a1b2c3 or benchpod-a1b2c3.local. */
+export type PodChoice = { name: string; connection: string }
 
 /**
  * Why the app cannot drive the pod it reached: firmware_too_old (3.x, the app offers the update),
