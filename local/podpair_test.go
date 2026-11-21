@@ -21,6 +21,10 @@ func TestPairCommandLine(t *testing.T) {
 		{"USB:benchpod-30a9f1", "benchpod-30a9f1"},
 		{"embeddedci:lab-pod-1", "lab-pod-1"},
 		{"benchpod-30a9f1", "benchpod-30a9f1"},
+		{"benchpod-c2f662.local", "benchpod-c2f662"},
+		{"BenchPod-C2F662.local", "benchpod-c2f662"},
+		{"usb:benchpod-c2f662.local", "benchpod-c2f662"},
+		{"pod.local", ""},
 		{"192.168.1.150", ""},
 		{"192.168.1.150:8443", ""},
 		{"usb", ""},
@@ -31,20 +35,51 @@ func TestPairCommandLine(t *testing.T) {
 			t.Errorf("podNameFromConnection(%q) = %q, want %q", c.conn, got, c.name)
 		}
 	}
-	if got, want := pairArgv(pairUSBConnection("benchpod-30a9f1")), []string{"--connection", "usb:benchpod-30a9f1", "lan-clients", "add"}; !reflect.DeepEqual(got, want) {
+	if got, want := pairArgv(pairUSBConnection("usb:benchpod-30a9f1", "benchpod-30a9f1")), []string{"--connection", "usb:benchpod-30a9f1", "lan-clients", "add"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("usb: %v, want %v", got, want)
 	}
-	if got, want := pairArgv(pairUSBConnection("")), []string{"--connection", "usb", "lan-clients", "add"}; !reflect.DeepEqual(got, want) {
+	if got, want := pairArgv(pairUSBConnection("usb", "")), []string{"--connection", "usb", "lan-clients", "add"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("usb, no name: %v, want %v", got, want)
 	}
 	if got, want := pairArgv(pairCloudConnection("benchpod-30a9f1")), []string{"--connection", "embeddedci:benchpod-30a9f1", "lan-clients", "add"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("cloud: %v, want %v", got, want)
 	}
+	// The bug from 0.2.2: two pods on USB, the app on the LAN. Pair hands the CLI the app's own LAN
+	// connection, so it pairs over that pod's USB link instead of asking which pod on USB.
+	for _, c := range []string{"192.168.1.164", "192.168.1.164:8443", "benchpod-c2f662.local", "benchpod-c2f662", "lab-pod.example.com"} {
+		if got, want := pairArgv(pairUSBConnection(c, podNameFromConnection(c))), []string{"--connection", c, "lan-clients", "add"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("LAN %s: %v, want %v", c, got, want)
+		}
+	}
+	for _, c := range []string{"usb", "usb:benchpod-30a9f1", "embeddedci:x", "/dev/cu.usbmodem1", "COM3", "", "-h", "a b"} {
+		if isLANConnection(c) {
+			t.Errorf("isLANConnection(%q)", c)
+		}
+	}
 	for conn, ok := range map[string]bool{"usb": true, "usb:benchpod-30a9f1": true, "embeddedci:benchpod-30a9f1": true,
-		"192.168.1.150": false, "": false, "usb:": false, "embeddedci:": false, "embeddedci:a b": false, "usb:--help": false} {
-		if validPairConnection(conn) != ok {
+		"192.168.1.164": true, "192.168.1.150": false, "": false, "usb:": false, "embeddedci:": false, "embeddedci:a b": false,
+		"usb:--help": false, "--help": false} {
+		if validPairConnection(conn, "192.168.1.164") != ok {
 			t.Errorf("validPairConnection(%q) != %v", conn, ok)
 		}
+	}
+	for in, want := range map[string]string{"benchpod-c2f662": "benchpod-c2f662.local", "benchpod-c2f662.local": "benchpod-c2f662.local",
+		"192.168.1.164": "192.168.1.164", "usb:benchpod-c2f662": "usb:benchpod-c2f662"} {
+		if got := mcpConnection(in); got != want {
+			t.Errorf("mcpConnection(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The CLI's refusal is the panel's error line, without "[benchpod]" and the command's name.
+func TestPairErrorText(t *testing.T) {
+	out := "benchpod-c2f662 did not answer on the LAN over mDNS; looking for it on USB (usb:benchpod-c2f662).\n" +
+		"[benchpod] lan-clients add: this computer is not paired with the pod at 192.168.1.164:8080, and the pod is not plugged in."
+	if got, want := pairErrorText(out), "This computer is not paired with the pod at 192.168.1.164:8080, and the pod is not plugged in."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := pairErrorText("lan-clients: the pod refused"); got != "lan-clients: the pod refused" {
+		t.Errorf("no prefix: %q", got)
 	}
 }
 
@@ -86,6 +121,21 @@ func TestPairRunsCLI(t *testing.T) {
 	if r := pair("192.168.1.150"); r.OK || !strings.Contains(r.Text, "usb") {
 		t.Errorf("LAN: %+v", r)
 	}
+	if _, err := os.Stat(argvFile); err == nil {
+		t.Error("the CLI ran for a LAN address that is not the app's connection")
+	}
+	// The app's own LAN connection goes to the CLI as it is.
+	st0 := app.store.Load()
+	st0.Connection = "192.168.1.164"
+	_ = app.store.Save(st0)
+	if o := app.pairingOptions(t.Context()); o.USB != "192.168.1.164" {
+		t.Errorf("pairing options on the LAN: %+v", o)
+	}
+	_ = pair("192.168.1.164")
+	if b, _ := os.ReadFile(argvFile); strings.TrimSpace(string(b)) != "--connection 192.168.1.164 lan-clients add" {
+		t.Errorf("LAN argv: %q", b)
+	}
+	_ = os.Remove(argvFile)
 	st := app.store.Load()
 	st.Offline = true
 	_ = app.store.Save(st)

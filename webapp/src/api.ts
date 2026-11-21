@@ -40,7 +40,7 @@ export type PodCompat = 'firmware_too_old' | 'app_too_old' | 'not_paired'
 /** How this computer can pair with the pod (GET /api/pod/pairing): over USB, or through embeddedci.com when signed in. */
 export type PairingOptions = {
   pod_name?: string
-  /** The connection to pair over the pod's USB-C cable: usb:<name>, or usb. */
+  /** The connection to pair over the pod's USB-C cable: the app's own LAN address or name (the CLI pairs over that pod's USB link), usb:<name>, or usb. */
   usb: string
   /** The account's pods on embeddedci.com (empty when not signed in or offline). */
   cloud: { name: string; online: boolean; connection: string }[]

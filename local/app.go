@@ -301,7 +301,7 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 		a.mu.Unlock()
 	}
 	if st.Connection != "" {
-		args = append(args, "--connection", st.Connection)
+		args = append(args, "--connection", mcpConnection(st.Connection))
 	}
 	// No --la-voltage: the board's I/O voltage comes from the pod's wiring profile (la_mv), which the
 	// MCP server's connect and the pod itself (firmware 3.10.10+) apply. settings.la_voltage from an
