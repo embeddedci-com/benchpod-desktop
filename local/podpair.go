@@ -3,6 +3,7 @@ package local
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -131,12 +132,25 @@ type pairingOptions struct {
 	Offline   bool       `json:"offline"`
 }
 
+// pairTarget is the connection of the pod to pair: the pod the app just reached that refused this
+// computer (Find your pod, before the user chose "Use this pod"), else the app's own connection.
+func (a *App) pairTarget(st Settings) string {
+	a.mu.Lock()
+	pod := a.pod
+	a.mu.Unlock()
+	if pod.Compat == compatNotPaired && strings.TrimSpace(pod.Connection) != "" {
+		return pod.Connection
+	}
+	return st.Connection
+}
+
 // pairingOptions is how this computer can pair with the pod: over USB always, through
 // embeddedci.com when the user is signed in and the account has pods.
 func (a *App) pairingOptions(ctx context.Context) pairingOptions {
 	st := a.store.Load()
-	name := podNameFromConnection(st.Connection)
-	out := pairingOptions{PodName: name, USB: pairUSBConnection(st.Connection, name), Cloud: []cloudPod{}, Offline: a.offline(st)}
+	target := a.pairTarget(st)
+	name := podNameFromConnection(target)
+	out := pairingOptions{PodName: name, USB: pairUSBConnection(target, name), Cloud: []cloudPod{}, Offline: a.offline(st)}
 	if out.Offline {
 		return out
 	}
@@ -182,7 +196,8 @@ type pairResult struct {
 func (a *App) pairPod(ctx context.Context, conn string) pairResult {
 	conn = strings.TrimSpace(conn)
 	st := a.store.Load()
-	if !validPairConnection(conn, st.Connection) {
+	target := a.pairTarget(st)
+	if !validPairConnection(conn, target) {
 		return pairResult{Text: "pair over usb, usb:<name>, embeddedci:<name> or the app's own connection"}
 	}
 	offline := a.offline(st)
@@ -225,8 +240,16 @@ func (a *App) pairPod(ctx context.Context, conn string) pairResult {
 		a.mu.Unlock()
 		return pairResult{Text: pairErrorText(text), Pod: pod}
 	}
-	// Paired: connect again (the MCP server's connect, over the app's own connection).
-	_, cerr := a.connectPod(ctx, true)
+	// Paired: connect again. A pod found by Find your pod (not yet the app's connection) is found
+	// again at the same place; otherwise the MCP server's connect over the app's own connection.
+	var cerr error
+	if target != st.Connection {
+		if f := a.findPod(ctx, target); !f.Connected && f.Error != "" {
+			cerr = errors.New(f.Error)
+		}
+	} else {
+		_, cerr = a.connectPod(ctx, true)
+	}
 	a.mu.Lock()
 	pod := a.pod
 	a.mu.Unlock()
