@@ -248,10 +248,24 @@ func (a *App) Close() {
 	t := a.tools
 	a.tools = nil
 	a.mu.Unlock()
-	if t != nil {
-		_ = t.Close()
-	}
+	closeMCP(context.Background(), t)
 	_ = a.actions.Close()
+}
+
+// closeMCP stops an MCP server, first letting it release the pod's lease: closing it alone leaves
+// the lease held until its TTL (2 min), so the next server's connect, or the CLI the app runs
+// next (pairing, firmware update), waits on it and fails with "busy". Every path that drops the
+// server goes through here.
+func closeMCP(ctx context.Context, t *agent.MCPTools) {
+	if t == nil {
+		return
+	}
+	if t.Alive() {
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		_, _ = t.Call(dctx, "disconnect", map[string]any{})
+		cancel()
+	}
+	_ = t.Close()
 }
 
 // startMCP (re)starts the MCP server with the current settings.
@@ -264,17 +278,7 @@ func (a *App) startMCP(ctx context.Context) (*agent.MCPTools, error) {
 	a.pod = podState{}
 	a.setMCPState(MCPStarting, "")
 	a.mu.Unlock()
-	if old != nil {
-		// Let the old server release the pod's lease first: closing it alone leaves the lease
-		// held until its TTL (2 min), and the new server's connect then waits on it (seen after
-		// pairing, where Find restarts the server right after the old one reached the pod).
-		if old.Alive() {
-			dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-			_, _ = old.Call(dctx, "disconnect", map[string]any{})
-			cancel()
-		}
-		_ = old.Close()
-	}
+	closeMCP(ctx, old)
 	fail := func(err error) (*agent.MCPTools, error) {
 		a.mu.Lock()
 		a.setMCPState(MCPFailed, err.Error())
@@ -611,9 +615,7 @@ func (a *App) serveSettings(w http.ResponseWriter, r *http.Request) {
 		t := a.tools
 		a.tools, a.pod, a.mcpState = nil, podState{}, MCPStopped
 		a.mu.Unlock()
-		if t != nil {
-			_ = t.Close()
-		}
+		closeMCP(r.Context(), t)
 	}
 	a.serveState(w, r)
 }
