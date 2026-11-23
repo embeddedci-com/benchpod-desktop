@@ -25,4 +25,11 @@ describe('profileToSave', () => {
     const none = profileToSave({ version: 2 }, effectiveWiring({ version: 2 }))
     expect('pulls' in none).toBe(false)
   })
+
+  it('writes the JTAG pins, shared with SWD or not, and null for those left unwired', async () => {
+    const { effectiveWiring } = await import('@bpui')
+    const draft = { version: 2, swd_swclk: 11, swd_swdio: 12, jtag_tck: 11, jtag_tms: 12, jtag_tdi: 3, jtag_tdo: 4 }
+    const out = profileToSave(draft, effectiveWiring(draft))
+    expect(out).toMatchObject({ swd_swclk: 11, swd_swdio: 12, jtag_tck: 11, jtag_tms: 12, jtag_tdi: 3, jtag_tdo: 4, jtag_trst: null })
+  })
 })
