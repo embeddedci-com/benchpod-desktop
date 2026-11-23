@@ -32,4 +32,12 @@ describe('profileToSave', () => {
     const out = profileToSave(draft, effectiveWiring(draft))
     expect(out).toMatchObject({ swd_swclk: 11, swd_swdio: 12, jtag_tck: 11, jtag_tms: 12, jtag_tdi: 3, jtag_tdo: 4, jtag_trst: null })
   })
+
+  it('writes debug_port when set and leaves it out for automatic', async () => {
+    const { effectiveWiring } = await import('@bpui')
+    const draft = { version: 2, swd_swclk: 11, swd_swdio: 12, jtag_tck: 11, jtag_tms: 12, jtag_tdi: 3, jtag_tdo: 4, debug_port: 'jtag' }
+    expect(profileToSave(draft, effectiveWiring(draft))).toMatchObject({ debug_port: 'jtag' })
+    const auto = { ...draft, debug_port: null }
+    expect('debug_port' in profileToSave(auto, effectiveWiring(auto))).toBe(false)
+  })
 })
