@@ -38,7 +38,7 @@ export function directionsNote(directions: string | null | undefined): string | 
 /** The profile keys the Pins editor writes, as stored: what is not set is left out. */
 export function profileToSave(draft: Record<string, unknown>, w: Wiring): Record<string, unknown> {
   const out: Record<string, unknown> = { ...draft, version: 2 }
-  for (const k of ['la_mv', 'efuse', 'uart_rx', 'uart_tx', 'uart_baud', 'i2c_sda', 'i2c_scl', 'i2c_addr', 'swd_swclk', 'swd_swdio', 'swd_nreset', 'swd_target', 'spi_sclk', 'spi_mosi', 'spi_miso', 'spi_cs', 'signals', 'dut_dirs', 'pulls'] as const)
+  for (const k of ['la_mv', 'efuse', 'uart_rx', 'uart_tx', 'uart_baud', 'i2c_sda', 'i2c_scl', 'i2c_addr', 'swd_swclk', 'swd_swdio', 'swd_nreset', 'swd_target', 'jtag_tck', 'jtag_tms', 'jtag_tdi', 'jtag_tdo', 'jtag_trst', 'spi_sclk', 'spi_mosi', 'spi_miso', 'spi_cs', 'signals', 'dut_dirs', 'pulls'] as const)
     out[k] = w[k]
   for (const k of ['la_mv', 'efuse', 'i2c_addr'] as const) if (!out[k]) delete out[k]
   if (out.pulls === null) delete out.pulls
