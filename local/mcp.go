@@ -26,9 +26,9 @@ import (
 // release (bump it with each release, to the version the Claude and Codex plugins pin), so a new
 // PyPI upload never reaches the app without a release of the app.
 //
-// RELEASE PIN (firmware 4.0.1, LAN pairing): 4.0.5 must be on PyPI before an app with it ships; until
-// then the app cannot install its tools. benchpod-cli v0.10.6 in release.yml goes with it.
-const MCPSpec = "embeddedci-mcp==4.0.5"
+// RELEASE PIN (firmware 4.0.1, LAN pairing): 4.0.6 must be on PyPI before an app with it ships; until
+// then the app cannot install its tools. benchpod-cli v0.10.7 in release.yml goes with it.
+const MCPSpec = "embeddedci-mcp==4.0.6"
 
 // The private uv (step 4 below) is this uv release, from its GitHub release archive, checked
 // against the SHA-256 in uvArchives (the release's .sha256 files) before anything is unpacked.
