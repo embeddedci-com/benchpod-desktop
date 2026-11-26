@@ -2,6 +2,8 @@ module github.com/embeddedci-com/benchpod-desktop
 
 go 1.26.0
 
+toolchain go1.26.11
+
 require (
 	github.com/embeddedci-com/benchpod-sim v0.0.0-20261120190108-0fead205be27
 	github.com/modelcontextprotocol/go-sdk v1.8.0
