@@ -38,9 +38,13 @@ export function directionsNote(directions: string | null | undefined): string | 
 /** The profile keys the Pins editor writes, as stored: what is not set is left out. */
 export function profileToSave(draft: Record<string, unknown>, w: Wiring): Record<string, unknown> {
   const out: Record<string, unknown> = { ...draft, version: 2 }
-  for (const k of ['la_mv', 'efuse', 'uart_rx', 'uart_tx', 'uart_baud', 'i2c_sda', 'i2c_scl', 'i2c_addr', 'swd_swclk', 'swd_swdio', 'swd_nreset', 'swd_target', 'jtag_tck', 'jtag_tms', 'jtag_tdi', 'jtag_tdo', 'jtag_trst', 'debug_port', 'spi_sclk', 'spi_mosi', 'spi_miso', 'spi_cs', 'signals', 'dut_dirs', 'pulls'] as const)
+  for (const k of ['la_mv', 'supply', 'uart_rx', 'uart_tx', 'uart_baud', 'i2c_sda', 'i2c_scl', 'i2c_addr', 'swd_swclk', 'swd_swdio', 'swd_nreset', 'swd_target', 'jtag_tck', 'jtag_tms', 'jtag_tdi', 'jtag_tdo', 'jtag_trst', 'debug_port', 'spi_sclk', 'spi_mosi', 'spi_miso', 'spi_cs', 'signals', 'dut_dirs', 'pulls'] as const)
     out[k] = w[k]
-  for (const k of ['la_mv', 'efuse', 'i2c_addr'] as const) if (!out[k]) delete out[k]
+  for (const k of ['la_mv', 'supply', 'i2c_addr'] as const) if (!out[k]) delete out[k]
+  // Pods on firmware without the `supply` key read `efuse`: write both for the two eFuse supplies.
+  delete out.efuse
+  if (w.supply === '5v') out.efuse = 1
+  else if (w.supply === 'external') out.efuse = 2
   if (out.pulls === null) delete out.pulls
   if (out.debug_port === null) delete out.debug_port
   if (out.dut_dirs && Object.keys(out.dut_dirs as object).length === 0) delete out.dut_dirs
