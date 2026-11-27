@@ -15,6 +15,18 @@ describe('directionsNote', () => {
 })
 
 describe('profileToSave', () => {
+  it('writes supply, plus the legacy efuse for the two eFuse supplies', async () => {
+    const { effectiveWiring } = await import('@bpui')
+    const ext = { version: 2, supply: 'external' }
+    expect(profileToSave(ext, effectiveWiring(ext))).toMatchObject({ supply: 'external', efuse: 2 })
+    const v4 = { version: 2, supply: '3v3' }
+    const out = profileToSave(v4, effectiveWiring(v4))
+    expect(out).toMatchObject({ supply: '3v3' })
+    expect('efuse' in out).toBe(false)
+    const none = profileToSave({ version: 2 }, effectiveWiring({ version: 2 }))
+    expect('supply' in none || 'efuse' in none).toBe(false)
+  })
+
   it('writes the editor keys, pulls included, and leaves out what is not set', async () => {
     const { effectiveWiring } = await import('@bpui')
     const draft = { version: 2, uart_rx: 5, pulls: [1], loop_input_unit: 'mA' }
